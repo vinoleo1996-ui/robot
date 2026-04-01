@@ -1,0 +1,23 @@
+profile: desktop_4090_gpu_stable
+environment: development
+gpu: rtx_4090
+runtime:
+  project_root: .
+  log_level: INFO
+  trace_enabled: false
+  mock_drivers: false
+  fast_path_budget_ms: 32
+  fast_path_pending_limit: 96
+  max_scenes_per_cycle: 4
+  async_perception_enabled: true
+  async_perception_queue_limit: 4
+  async_executor_enabled: true
+  async_executor_queue_limit: 96
+  async_capture_enabled: true
+  async_capture_queue_limit: 4
+  enabled_pipelines:
+    - face
+    - gesture
+    - gaze
+    - audio
+    - motion

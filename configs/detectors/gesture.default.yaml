@@ -1,0 +1,5 @@
+enabled: true
+backend: mediapipe_gesture_recognizer
+sampling_fps: 15
+min_confidence: 0.85
+stable_duration_ms: 300

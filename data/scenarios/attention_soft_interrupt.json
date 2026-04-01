@@ -1,0 +1,27 @@
+{
+  "scenario_id": "attention_soft_interrupt",
+  "name": "attention_soft_interrupt",
+  "title": "Attention soft interrupt",
+  "category": "base",
+  "description": "attention 先执行，随后 greeting 以 soft-interrupt 方式接管当前交互。",
+  "expected": {
+    "executed_behaviors": ["perform_attention", "perform_greeting"],
+    "last_outcome": "executed"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-attention-1",
+      "target_id": "user-attention",
+      "score_hint": 0.82
+    },
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-1",
+      "target_id": "user-greeting",
+      "score_hint": 0.96
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+enabled: true
+backend: mediapipe_iris
+sampling_fps: 10
+hold_duration_ms: 3000
+max_offset_degrees: 15

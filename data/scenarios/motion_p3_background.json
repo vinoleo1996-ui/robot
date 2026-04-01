@@ -1,0 +1,28 @@
+{
+  "scenario_id": "motion_p3_background",
+  "name": "motion_p3_background",
+  "title": "Motion background P3",
+  "category": "base",
+  "description": "motion 先以 P3 背景行为执行，后续 greeting 到来后不被它阻塞。",
+  "expected": {
+    "executed_behaviors": ["perform_tracking", "perform_greeting"],
+    "pending_queue": 0,
+    "last_outcome": "executed"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "ambient_tracking_scene",
+      "trace_id": "trace-motion-1",
+      "target_id": "room",
+      "score_hint": 0.77
+    },
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-motion-2",
+      "target_id": "user-001",
+      "score_hint": 0.95
+    }
+  ]
+}

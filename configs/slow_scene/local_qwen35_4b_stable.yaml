@@ -1,0 +1,23 @@
+slow_scene:
+  enabled: true
+  queue_size: 4
+  request_timeout_ms: 7000
+  max_pending_per_target: 1
+  dedup_time_bucket_s: 3.0
+  trigger_min_score: 0.85
+  use_qwen: true
+  model_path: "/home/agiuser/桌面/Qwen3.5-4B"
+  adapter_config:
+    device: "cuda"
+    dtype: "float16"
+    require_gpu: true
+    n_ctx: 3072
+    n_gpu_layers: -1
+    n_threads: 4
+    max_new_tokens: 256
+    enable_continuation: false
+    temperature: 0.0
+    top_p: 0.85
+    sample_interval_s: 6.0
+    force_sample: false
+    max_image_side: 448

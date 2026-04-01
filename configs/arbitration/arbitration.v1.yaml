@@ -1,0 +1,10 @@
+priorities:
+  P0:
+    preempt: true
+  P1:
+    soft_interrupt: true
+  P2:
+    queue: true
+  P3:
+    queue: false
+max_queue_size: 3

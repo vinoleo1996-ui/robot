@@ -1,0 +1,21 @@
+# 4090 MVP Development Checklist
+
+- [x] 1. Freeze shared contracts: `event_type / scene_type / behavior_id / priority / decision_mode`.
+- [x] 2. Stabilizer config by event type (`debounce/cooldown/ttl/dedup`).
+- [x] 3. Scene aggregator upgrade to multi-signal fusion.
+- [x] 4. Arbitration runtime: preemption/queue/drop/degrade.
+- [x] 5. Minimal behavior-tree executor (`idle/greet/attention/alert/observe/recover`).
+- [x] 6. Resource model upgrade for shared ownership tracking.
+- [x] 7. Wire `run-live` end-to-end loop.
+- [x] 8. Hardware source management (camera/mic open/read/recover/close).
+- [x] 9. Pipeline factory from detector config (real + fallback).
+- [x] 10. Runtime observability (trace + latency + key decisions).
+- [x] 11. Real-device first chain: `gesture` live loop.
+- [x] 12. Extend to `face + gaze` scene flows.
+- [x] 13. Extend to `audio + motion` scene flows.
+- [x] 14. Qwen 4B async sidecar integration.
+- [x] 15. Slow-brain trigger policy (`uncertain/conflict only`).
+- [x] 16. Slow-brain result feedback to arbitration without blocking fast loop.
+- [x] 17. Formal regression suite (`pytest + compile + CLI smoke + run-live smoke`).
+- [x] 18. 4090 performance validation (latency, VRAM, timeout/degrade behavior).
+- [x] 19. UX validation (10-minute stability and low-disturbance behavior).

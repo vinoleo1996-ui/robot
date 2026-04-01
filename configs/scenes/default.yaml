@@ -1,0 +1,81 @@
+# Scene Aggregation Configuration
+# Defines how events are combined into high-level scenes
+
+scenes:
+  # Greeting scene: User is being recognized
+  greeting_scene:
+    triggers:
+      - event_type: familiar_face_detected
+        min_confidence: 0.85
+    required_context:
+      - gaze_toward_robot: true
+    duration_ms: 5000
+    fusion_timeout_ms: 2000
+  
+  # Attention scene: User is paying attention
+  attention_scene:
+    triggers:
+      - event_type: gaze_sustained_detected
+        min_confidence: 0.75
+      - event_type: gesture_detected
+        min_confidence: 0.7
+    required_context: []
+    duration_ms: 3000
+    fusion_timeout_ms: 1500
+  
+  # Safety alert scene: Urgent safety situation
+  safety_alert_scene:
+    triggers:
+      - event_type: collision_warning_detected
+        min_confidence: 0.5
+      - event_type: emergency_stop_detected
+        min_confidence: 1.0
+    required_context: []
+    duration_ms: 2000
+    fusion_timeout_ms: 500
+    priority: P0
+  
+  # Gesture bond scene: User gesture interaction
+  gesture_bond_scene:
+    triggers:
+      - event_type: gesture_detected
+        min_confidence: 0.8
+    required_context:
+      - gaze_toward_robot: true
+      - user_near: true
+    duration_ms: 4000
+    fusion_timeout_ms: 1500
+  
+  # Ambient tracking scene: Passive monitoring
+  ambient_tracking_scene:
+    triggers:
+      - event_type: motion_detected
+        min_confidence: 0.6
+    required_context: []
+    duration_ms: 2000
+    fusion_timeout_ms: 1000
+    priority: P3
+
+# Scene aggregation rules
+aggregation:
+  # How to combine multiple events
+  fusion_strategy: "weighted_score"  # weighted_score, first_match, all_match
+  
+  # Score computation
+  scoring:
+    base_confidence_weight: 0.7
+    context_match_weight: 0.3
+    recency_weight: 0.5
+    cooldown_penalty: 0.2
+  
+  # Multi-event fusion
+  fusion:
+    max_event_window_ms: 2000    # Events within this window can fuse
+    min_events_to_trigger: 1      # Minimum events to trigger scene
+    debounce_ms: 300              # Scene debounce time
+  
+  # Scene lifetime
+  scene_ttl:
+    default_ms: 3000
+    min_ms: 1000
+    max_ms: 10000

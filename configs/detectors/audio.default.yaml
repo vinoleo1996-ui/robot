@@ -1,0 +1,5 @@
+enabled: true
+backend: rms_plus_yamnet
+sample_rate_hz: 16000
+loud_delta_db: 20
+global_cooldown_sec: 5

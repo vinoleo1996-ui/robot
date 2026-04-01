@@ -1,0 +1,20 @@
+{
+  "name": "familiar_face_via_detection",
+  "description": "A familiar face detection should flow through builder, stabilizer, aggregator, and arbitration into greeting.",
+  "expected": {
+    "executed_behaviors": ["perform_greeting"]
+  },
+  "steps": [
+    {
+      "type": "detection",
+      "trace_id": "trace-face-1",
+      "detector": "mock_face",
+      "event_type": "familiar_face",
+      "confidence": 0.97,
+      "payload": {
+        "target_id": "user-face",
+        "event_confidence": 0.97
+      }
+    }
+  ]
+}

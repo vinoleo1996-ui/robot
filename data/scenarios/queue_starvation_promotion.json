@@ -1,0 +1,53 @@
+{
+  "name": "queue_starvation_promotion",
+  "description": "A waiting P2 attention item should be promoted before a newer queued P3 ambient item after starvation timeout elapses.",
+  "expected": {
+    "executed_behaviors": ["perform_greeting", "perform_attention", "perform_tracking"]
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-starve-greeting",
+      "target_id": "user-greeting",
+      "score_hint": 0.95
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 60
+    },
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-starve-attention",
+      "target_id": "user-attention",
+      "score_hint": 0.82
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 60
+    },
+    {
+      "type": "scene",
+      "scene_type": "ambient_tracking_scene",
+      "trace_id": "trace-starve-motion",
+      "target_id": "user-motion",
+      "score_hint": 0.75
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 600
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    }
+  ]
+}

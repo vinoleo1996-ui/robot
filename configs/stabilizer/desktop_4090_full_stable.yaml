@@ -1,0 +1,46 @@
+stabilizer:
+  debounce_count: 1
+  debounce_window_ms: 200
+  cooldown_ms: 800
+  dedup_window_ms: 300
+  hysteresis_threshold: 0.6
+  hysteresis_transition_high: 0.75
+  hysteresis_transition_low: 0.5
+  default_ttl_ms: 2000
+  event_overrides:
+    familiar_face_detected:
+      cooldown_ms: 1200
+      debounce_count: 1
+      hysteresis_threshold: 0.65
+      dedup_window_ms: 600
+      ttl_ms: 2500
+    stranger_face_detected:
+      cooldown_ms: 900
+      debounce_count: 1
+      hysteresis_threshold: 0.6
+      dedup_window_ms: 500
+      ttl_ms: 2000
+    gesture_detected:
+      cooldown_ms: 1200
+      debounce_count: 1
+      hysteresis_threshold: 0.6
+      dedup_window_ms: 350
+      ttl_ms: 1800
+    gaze_sustained_detected:
+      cooldown_ms: 1000
+      debounce_count: 1
+      hysteresis_threshold: 0.58
+      dedup_window_ms: 300
+      ttl_ms: 1500
+    loud_sound_detected:
+      cooldown_ms: 1500
+      debounce_count: 1
+      hysteresis_threshold: 0.6
+      dedup_window_ms: 250
+      ttl_ms: 1200
+    motion_detected:
+      cooldown_ms: 900
+      debounce_count: 1
+      hysteresis_threshold: 0.58
+      dedup_window_ms: 250
+      ttl_ms: 1500

@@ -1,0 +1,16 @@
+{
+  "name": "motion_background_only",
+  "description": "Ambient tracking should execute as a low-priority background behavior when no higher-priority scene is active.",
+  "expected": {
+    "executed_behaviors": ["perform_tracking"]
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "ambient_tracking_scene",
+      "trace_id": "trace-motion-1",
+      "target_id": "user-motion",
+      "score_hint": 0.78
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+scenes:
+  - name: greeting_scene
+    triggers:
+      - familiar_face_detected
+  - name: attention_scene
+    triggers:
+      - gaze_hold_detected
+  - name: safety_alert_scene
+    triggers:
+      - loud_sound_detected

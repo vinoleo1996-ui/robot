@@ -1,0 +1,6 @@
+enabled: true
+backend: insightface
+fallback_backend: deepface
+sampling_fps: 10
+min_face_area_ratio: 0.05
+stable_duration_ms: 1500

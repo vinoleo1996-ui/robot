@@ -1,0 +1,23 @@
+{
+  "name": "attention_then_greeting_soft_interrupt",
+  "description": "Greeting should soft-interrupt an active attention scene.",
+  "expected": {
+    "executed_behaviors": ["perform_attention", "perform_greeting"]
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-attention-1",
+      "target_id": "user-attention",
+      "score_hint": 0.82
+    },
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-2",
+      "target_id": "user-greeting",
+      "score_hint": 0.96
+    }
+  ]
+}

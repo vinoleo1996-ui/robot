@@ -1,0 +1,82 @@
+# 4090 full-stack stable detector profile: tuned for long-running local camera + microphone experience.
+detectors:
+  face:
+    detector_type: "insightface"
+    enabled: true
+    sample_rate_hz: 8
+    runtime_budget_ms: 14
+    model_path: "~/.insightface/models/buffalo_l_legacy"
+    fallback_model_path: "models/mediapipe/face_landmarker.task"
+    config:
+      model_name: "buffalo_l_legacy"
+      model_root: "~/.insightface/models"
+      providers: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+      require_gpu: true
+      det_thresh: 0.55
+      det_size: [640, 640]
+      rec_batch_size: 16
+
+  gesture:
+    detector_type: "mediapipe_gesture"
+    enabled: true
+    sample_rate_hz: 10
+    runtime_budget_ms: 10
+    model_path: "models/mediapipe/gesture_recognizer.task"
+    config:
+      use_gpu: true
+      require_gpu: false
+      num_hands: 2
+      min_detection_confidence: 0.55
+      min_hand_presence_confidence: 0.5
+      min_tracking_confidence: 0.5
+
+  gaze:
+    detector_type: "mediapipe_iris"
+    enabled: true
+    sample_rate_hz: 6
+    runtime_budget_ms: 10
+    model_path: "models/mediapipe/face_landmarker.task"
+    config:
+      use_gpu: true
+      require_gpu: false
+      min_detection_confidence: 0.55
+      max_eyes_to_detect: 2
+
+  audio:
+    detector_type: "rms_audio"
+    enabled: true
+    sample_rate_hz: 20
+    runtime_budget_ms: 4
+    model_path: "builtin:robot_life/rms_loud_sound_v1"
+    config:
+      sample_rate: 16000
+      frame_length: 0.064
+      cooldown_s: 0.75
+      rms_threshold: 0.15
+      db_threshold: 70
+
+  motion:
+    detector_type: "yolo"
+    enabled: true
+    sample_rate_hz: 15
+    runtime_budget_ms: 18
+    model_path: "models/yolo/yolov8n.pt"
+    config:
+      providers: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+      require_gpu: false
+      allow_cuda_fallback: true
+      device: "cuda:0"
+      conf_threshold: 0.55
+      iou_threshold: 0.45
+      classes: [0]
+      imgsz: 512
+      max_det: 5
+      half: true
+
+detector_global:
+  input_source: "camera"
+  resolution: [960, 540]
+  frame_rate: 30
+  enable_gpu: true
+  gpu_device_id: 0
+  fast_cycle_budget_ms: 32

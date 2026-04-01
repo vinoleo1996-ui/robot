@@ -1,0 +1,21 @@
+slow_scene:
+  enabled: true
+  queue_size: 8
+  request_timeout_ms: 8000
+  max_pending_per_target: 1
+  dedup_time_bucket_s: 2.0
+  trigger_min_score: 0.8
+  use_qwen: true
+  model_path: "models/qwen/Qwen-2B-gguf"
+  adapter_config:
+    device: "cuda"
+    dtype: "float16"
+    require_gpu: false
+    n_ctx: 4096
+    n_gpu_layers: -1
+    max_new_tokens: 704
+    enable_continuation: true
+    temperature: 0.0
+    sample_interval_s: 5.0
+    force_sample: false
+    max_image_side: 512

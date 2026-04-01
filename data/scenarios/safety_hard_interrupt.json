@@ -1,0 +1,27 @@
+{
+  "scenario_id": "safety_hard_interrupt",
+  "name": "safety_hard_interrupt",
+  "title": "Safety hard interrupt",
+  "category": "base",
+  "description": "attention 正在执行时，safety_alert 作为 P0 hard-interrupt 立即接管。",
+  "expected": {
+    "executed_behaviors": ["perform_attention", "perform_safety_alert"],
+    "last_outcome": "executed"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-safety-attention-1",
+      "target_id": "user-001",
+      "score_hint": 0.8
+    },
+    {
+      "type": "scene",
+      "scene_type": "safety_alert_scene",
+      "trace_id": "trace-safety-alert-1",
+      "target_id": "room",
+      "score_hint": 0.99
+    }
+  ]
+}

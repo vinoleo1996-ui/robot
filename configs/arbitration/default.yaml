@@ -1,0 +1,133 @@
+# Arbitration Rules Configuration
+# Defines priority rules and resource allocation strategies
+#
+# Priority Design Rationale (量产用户体验视角):
+#   P0 — Safety: 碰撞/急停/巨响 → 立即硬打断一切
+#   P1 — Familiar Interaction: 识别到熟人/主动手势交互 → soft-interrupt 注意力行为
+#        理由: 熟人出现时机器人应表现出"认识你、很高兴见到你"的主动性
+#   P2 — Stranger/Gaze Attention: 陌生人/持续注视 → 排队等候，不打断熟人交互
+#        理由: 陌生人刚进入视野不应打断正在进行的熟人问候
+#   P3 — Ambient: 运动追踪 → 最低优先级背景行为
+#
+# 典型场景流:
+#   1. 陌生人走近(P2 attention) → 机器人抬头关注
+#   2. 识别出是熟人(P1 greeting) → soft-interrupt attention → 主动问候
+#   3. 熟人挥手(P1 gesture) → 排队在 greeting 后执行
+#   4. 突然传来巨响(P0 safety) → hard-interrupt 一切 → 安全警报
+
+arbitration:
+  # Priority mappings for event types
+  event_priorities:
+    # Safety events (P0 - highest, hard interrupt)
+    safety_alert_detected: P0
+    emergency_stop_detected: P0
+    collision_warning_detected: P0
+    loud_sound_detected: P0
+
+    # Familiar interaction events (P1 - high, soft interrupt P2)
+    familiar_face_detected: P1
+    gesture_detected: P1
+    direct_interaction: P1
+    user_calling: P1
+
+    # Stranger/gaze attention events (P2 - medium, queue behind P1)
+    stranger_face_detected: P2
+    attention_request: P2
+    gaze_sustained_detected: P2
+    gaze_away_detected: P2
+
+    # Ambient events (P3 - low, never interrupt)
+    motion_detected: P3
+    ambient_tracking: P3
+    background_monitoring: P3
+
+  # Priority interrupt strategies
+  priorities:
+    P0:
+      interrupt: immediate         # Hard interrupt any current behavior
+      queue_timeout_ms: 0          # No queue for P0
+    P1:
+      interrupt: soft              # Soft interrupt P2/P3, queue behind P0/P1
+      queue_timeout_ms: 5000
+    P2:
+      interrupt: queue             # Queue behind higher priority
+      queue_timeout_ms: 10000
+    P3:
+      interrupt: never             # Never interrupt, queue only
+      queue_timeout_ms: 15000
+
+  # Scene to behavior mappings
+  #
+  # greeting_scene:  triggered by familiar_face → P1
+  #   Familiar face + gaze fusion → warm proactive greeting
+  #   Can soft-interrupt P2 attention (correct: you recognize someone mid-scan)
+  #
+  # stranger_attention_scene: triggered by stranger_face → P2
+  #   Same priority as gaze, won't fight with attention_scene
+  #
+  # attention_scene: triggered by gaze_sustained → P2
+  #   Coexists with stranger_attention, first-come first-served
+  scene_behaviors:
+    greeting_scene:
+      target_behavior: "perform_greeting"
+      priority: P1
+      required_resources: ["HeadMotion", "FaceExpression"]
+      optional_resources: ["AudioOut"]
+      degraded_behavior: "greeting_visual_only"
+      resume_previous: true
+
+    stranger_attention_scene:
+      target_behavior: "perform_attention"
+      priority: P2
+      required_resources: ["HeadMotion"]
+      optional_resources: ["FaceExpression"]
+      degraded_behavior: "attention_minimal"
+      resume_previous: true
+
+    attention_scene:
+      target_behavior: "perform_attention"
+      priority: P2
+      required_resources: ["HeadMotion"]
+      optional_resources: ["FaceExpression", "AudioOut"]
+      degraded_behavior: "attention_minimal"
+      resume_previous: true
+
+    safety_alert_scene:
+      target_behavior: "perform_safety_alert"
+      priority: P0
+      required_resources: ["AudioOut"]
+      optional_resources: ["HeadMotion", "FaceExpression"]
+      degraded_behavior: null
+      resume_previous: false
+      hard_interrupt: true
+
+    gesture_bond_scene:
+      target_behavior: "perform_gesture_response"
+      priority: P1
+      required_resources: ["FaceExpression"]
+      optional_resources: ["HeadMotion", "AudioOut"]
+      degraded_behavior: "gesture_visual_only"
+      resume_previous: true
+
+    ambient_tracking_scene:
+      target_behavior: "perform_tracking"
+      priority: P3
+      required_resources: []
+      optional_resources: ["HeadMotion"]
+      degraded_behavior: null
+      resume_previous: true
+
+  # Queue settings
+  queue:
+    max_size: 32
+    timeout_ms: 5000
+    p1_queue_limit: 3
+    p2_queue_limit: 4
+    starvation_after_ms: 1500
+
+  # Behavior cooldowns (ms)
+  behavior_cooldowns:
+    perform_greeting: 3000
+    perform_attention: 2000
+    perform_gesture_response: 3000
+    perform_tracking: 1000

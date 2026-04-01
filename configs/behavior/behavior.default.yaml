@@ -1,0 +1,6 @@
+default_nonverbal_probability: 0.3
+resources:
+  - AudioOut
+  - HeadMotion
+  - FaceExpression
+  - BodyMotion

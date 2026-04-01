@@ -1,0 +1,143 @@
+# Upgraded Detector Configuration (Phase 1-2)
+# Uses Whisper ASR + YOLO Pose for significantly better MVP experience
+# Requires: pip install faster-whisper ultralytics torch
+
+detectors:
+  # UPGRADED: Face Recognition (unchanged, just validated)
+  face:
+    detector_type: "insightface"
+    enabled: true
+    model_path: "~/.insightface/models/buffalo_l_legacy"
+    config:
+      model_name: "buffalo_l_legacy"
+      model_root: "~/.insightface/models"
+      providers: ["CUDAExecutionProvider", "CPUExecutionProvider"]
+      require_gpu: true
+      det_thresh: 0.5
+  
+  # UPGRADED: Audio → Whisper ASR (was: RMS/dB energy detection)
+  # Impact: From "is sound loud?" to "what did user say?"
+  audio:
+    detector_type: "whisper"
+    enabled: true
+    model_path: "NA"  # Model loaded from HuggingFace
+    config:
+      model_variant: "small"  # Options: tiny(39M), small(244M), medium(769M), large(1.5B)
+      device: "cuda:0"
+      compute_type: "float16"  # Options: auto, float32, int8, float16
+      
+      # Speech recognition parameters
+      language_detection: true  # Auto-detect language (or set to "zh"/"en")
+      task: "transcribe"  # Options: transcribe, translate
+      beam_size: 3  # Higher = more accurate but slower (3-5 recommended)
+      temperature: 0.2  # Lower = more deterministic (0-1)
+      
+      # Performance tuning
+      require_gpu: false
+      vad_filter: true  # Voice activity detection filter
+      
+  # UPGRADED: Gesture → YOLO v8 Pose (was: MediaPipe 7 gestures)
+  # Impact: From 7 fixed gestures to 50+ customizable skeleton-based recognition
+  gesture:
+    detector_type: "yolo_pose"
+    enabled: true
+    model_path: "yolov8n-pose.pt"  # Auto-downloads from YOLOv8 hub
+    config:
+      device: "cuda:0"
+      require_gpu: false
+      allow_cuda_fallback: true
+      
+      # Detection parameters
+      conf_threshold: 0.5
+      gesture_cooldown_sec: 0.3  # Prevent rapid re-triggering
+      
+      # Custom gesture definitions (optional)
+      # Users can add custom gesture checks here
+      custom_gestures: {}
+      # Example:
+      # custom_gestures:
+      #   "wave": "def check_wave(keypoints): ..."
+      #   "thumbs_down": "def check_thumbs_down(keypoints): ..."
+  
+  # UNCHANGED: Gaze detection (working well)
+  gaze:
+    detector_type: "mediapipe_iris"
+    enabled: true
+    model_path: "models/mediapipe/face_landmarker.task"
+    config:
+      use_gpu: true
+      min_detection_confidence: 0.5
+  
+  # UNCHANGED: Motion detection (frame diff)
+  # Note: Can optionally upgrade to SlowFast for RGB action understanding
+  motion:
+    detector_type: "opencv"  # or "yolo" for semantic understanding
+    enabled: true
+    config:
+      detector_type: "opencv"  # fast, CPU-friendly
+      pixel_threshold: 25
+      blur_kernel: 5
+      min_area_ratio: 0.02
+      motion_cooldown_sec: 0.5
+
+# Performance expectations with upgraded detectors
+# (RTX 4090, batch size 1)
+performance:
+  # Per-detector latency
+  insightface_face: 20-30ms  # unchanged
+  whisper_asr:
+    tiny: "1-2s per sentence"  # depends on sentence length
+    small: "2-3s per sentence"
+    medium: "3-4s per sentence"
+  yolo_pose_gesture: 15-25ms  # slightly slower than MediaPipe 10-20ms, acceptable
+  mediapipe_gaze: 10-15ms  # unchanged
+  opencv_motion: <5ms  # unchanged
+  
+  # Total parallel latency (critical path)
+  # face + gesture + gaze + motion = max(30, 25, 15, 5) = ~30ms ✓ under 50ms budget
+  
+  # GPU memory usage
+  gpu_vram_mb:
+    insightface: 2000
+    whisper_small: 4000
+    yolo_pose: 2000
+    mediapipe: 1000
+    opencv: 0
+    system_buffer: 2000
+    # Total: ~11GB (plenty of headroom on 24GB 4090)
+
+# Event generation thresholds (critical for quality)
+event_thresholds:
+  # Speech event (only emit if high confidence to avoid noise)
+  whisper_min_confidence: 0.7
+  whisper_min_text_length: 3  # chars
+  whisper_languages: ["zh", "en"]  # accepted languages
+  
+  # Gesture event
+  gesture_min_confidence: 0.6
+  
+  # Other unchanged
+  face_min_confidence: 0.7
+  gaze_min_confidence: 0.5
+  motion_min_area_ratio: 0.02
+
+# Configuration notes
+config_notes: |
+  Whisper Model Selection Guide:
+    - tiny (39M):    Fastest (1-2s), lowest quality, good for real-time
+    - small (244M):  **RECOMMENDED** - Best balance (2s latency, high quality)
+    - medium (769M): Better quality but 3-4s (only if time not critical)
+    - large (1.5B):  Best quality but 5-8s (cloud backend only)
+  
+  YOLO Pose vs MediaPipe:
+    - Gesture recognition now skeleton-based (more robust)
+    - Can add custom gestures by defining check functions
+    - Slightly higher latency (15-25ms vs 10-20ms) but acceptable
+    - Much better extensibility (50+ gestures vs 7)
+  
+  Integration Steps:
+    1. pip install faster-whisper ultralytics
+    2. Download models: yolov8n-pose.pt (auto-downloads)
+    3. Update configs/detectors/default.yaml to use this file
+    4. Test with: python scripts/validate/validate_4090.py --upgraded
+    5. Monitor GPU usage: nvidia-smi

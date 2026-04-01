@@ -1,0 +1,58 @@
+{
+  "scenario_id": "starvation_queue_promotion",
+  "name": "starvation_queue_promotion",
+  "title": "Starvation queue promotion",
+  "category": "boundary",
+  "description": "较早入队的 attention 在 starvation 时间窗后，应先于更晚入队的 ambient_tracking 被取出执行。",
+  "expected": {
+    "executed_behaviors": ["perform_greeting", "perform_attention", "perform_tracking"],
+    "pending_queue": 0,
+    "last_outcome": "dequeued"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-starve-greeting",
+      "target_id": "user-greeting",
+      "score_hint": 0.95
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 60
+    },
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-starve-attention",
+      "target_id": "user-attention",
+      "score_hint": 0.82
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 60
+    },
+    {
+      "type": "scene",
+      "scene_type": "ambient_tracking_scene",
+      "trace_id": "trace-starve-motion",
+      "target_id": "user-motion",
+      "score_hint": 0.75
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 600
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    }
+  ]
+}

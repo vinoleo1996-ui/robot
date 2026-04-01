@@ -1,0 +1,60 @@
+safety:
+  enabled: true
+
+  # Behaviors matching dangerous tokens must be explicitly allowlisted.
+  dangerous_behavior_allowlist:
+    - perform_greeting
+    - perform_attention
+    - perform_gesture_response
+    - perform_tracking
+    - perform_safety_alert
+    - greeting_visual_only
+    - attention_minimal
+    - gesture_visual_only
+
+  dangerous_behavior_tokens:
+    - swing
+    - strike
+    - throw
+    - kick
+    - slam
+    - dash
+
+  emergency_behavior_tokens:
+    - safety_alert
+    - emergency_stop
+    - estop
+    - e_stop
+    - panic
+
+  emergency_reason_tokens:
+    - emergency
+    - collision
+    - safety
+    - danger
+    - estop
+    - panic
+
+  # Mutual exclusion matrix: behaviors that should not coexist in one cycle.
+  behavior_mutex:
+    perform_safety_alert:
+      - perform_greeting
+      - perform_attention
+      - perform_gesture_response
+      - perform_tracking
+    perform_greeting:
+      - perform_attention
+      - perform_gesture_response
+      - perform_tracking
+    perform_attention:
+      - perform_greeting
+      - perform_gesture_response
+      - perform_tracking
+    perform_gesture_response:
+      - perform_greeting
+      - perform_attention
+      - perform_tracking
+    perform_tracking:
+      - perform_greeting
+      - perform_attention
+      - perform_gesture_response

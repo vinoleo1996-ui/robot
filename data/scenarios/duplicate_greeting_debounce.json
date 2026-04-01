@@ -1,0 +1,29 @@
+{
+  "name": "duplicate_greeting_debounce",
+  "description": "A duplicate greeting for the same target within the batch window should be debounced rather than queued again.",
+  "expected": {
+    "executed_behaviors": ["perform_greeting"],
+    "last_outcome": "debounced"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-dup-1",
+      "target_id": "user-repeat",
+      "score_hint": 0.95
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 10
+    },
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-dup-2",
+      "target_id": "user-repeat",
+      "score_hint": 0.95
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "robot-life-dev"
+version = "0.1.0"
+description = "Desktop MVP scaffold for a robot proactive interaction engine."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.7,<3",
+  "pyyaml>=6.0,<7",
+  "rich>=13.7,<14",
+  "typer>=0.12,<1",
+  "numpy>=1.26,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0,<9",
+  "ruff>=0.5,<0.6",
+  "pytest-asyncio>=0.21,<1",
+]
+
+# Perception: MediaPipe, InsightFace, etc.
+perception = [
+  "opencv-python>=4.10,<5",
+  "mediapipe>=0.10,<1",
+  "insightface>=0.2.1,<1",
+  "onnxruntime>=1.18,<2; platform_system == 'Darwin'",
+  "onnxruntime-gpu>=1.18,<2; platform_system != 'Darwin'",
+  "pyobjc-framework-AVFoundation>=12.1,<13; platform_system == 'Darwin'",
+  "pyobjc-framework-CoreMedia>=12.1,<13; platform_system == 'Darwin'",
+]
+
+# Audio processing
+audio = [
+  "sounddevice>=0.4,<1",
+  "librosa>=0.10,<1",
+  "soundfile>=0.12,<1",
+  "scipy>=1.11,<2",
+  "torchaudio>=2.0,<3",
+  "faster-whisper>=1.1,<2",
+  "silero-vad>=6.0,<7",
+  "panns-inference>=0.1,<1",
+]
+
+# Slow thinking models (vision-language)
+slow_thinking = [
+  "torch>=2.0,<3",
+  "transformers>=4.35,<5",
+  "pillow>=10,<11",
+  "accelerate>=0.24,<1",
+]
+
+# Motion detection and tracking
+detection = [
+  "ultralytics>=8.0,<9",
+  "opencv-python>=4.10,<5",
+  "pycocotools>=2.0,<3",
+]
+
+# Complete MVP (all components)
+mvp = [
+  "opencv-python>=4.10,<5",
+  "mediapipe>=0.10,<1",
+  "insightface>=0.2.1,<1",
+  "torch>=2.0,<3",
+  "transformers>=4.35,<5",
+  "ultralytics>=8.0,<9",
+  "onnxruntime>=1.18,<2; platform_system == 'Darwin'",
+  "onnxruntime-gpu>=1.18,<2; platform_system != 'Darwin'",
+  "pyobjc-framework-AVFoundation>=12.1,<13; platform_system == 'Darwin'",
+  "pyobjc-framework-CoreMedia>=12.1,<13; platform_system == 'Darwin'",
+  "pillow>=10,<11",
+  "accelerate>=0.24,<1",
+  "sounddevice>=0.4,<1",
+  "librosa>=0.10,<1",
+  "scipy>=1.11,<2",
+]
+
+[project.scripts]
+robot-life-demo = "robot_life.app:main"
+robot-life-doctor = "robot_life.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "tests/new_runtime"]

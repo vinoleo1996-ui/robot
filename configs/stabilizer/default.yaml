@@ -1,0 +1,58 @@
+# Event Stabilizer Configuration
+# Controls debounce, hysteresis, dedup, cooldown, and TTL validation
+
+stabilizer:
+  # Global debounce settings
+  debounce_count: 2               # Number of confirmations needed
+  debounce_window_ms: 300         # Time window for confirmations (milliseconds)
+  
+  # Global cooldown setting
+  cooldown_ms: 1000               # Minimum interval between same event (milliseconds)
+
+  # Global dedup setting
+  dedup_window_ms: 500            # Merge duplicate payloads within this window
+  
+  # Hysteresis to prevent boundary oscillation
+  hysteresis_threshold: 0.7       # Confidence threshold for stability (0.0-1.0)
+  hysteresis_transition_high: 0.85  # Required confidence for low->high transition
+  hysteresis_transition_low: 0.6    # Required confidence drop for high->low transition
+  
+  # Default TTL for events
+  default_ttl_ms: 3000            # Default event time-to-live (milliseconds)
+  
+  # Per-event-type parameter overrides
+  event_overrides:
+    familiar_face_detected:
+      cooldown_ms: 2000           # Longer cooldown between face recognitions
+      debounce_count: 3           # Require 3 confirmations for face
+      hysteresis_threshold: 0.75  # Stricter threshold for faces
+      dedup_window_ms: 1000
+      ttl_ms: 3000
+    
+    gesture_detected:
+      cooldown_ms: 3000           # Longer cooldown between gestures  
+      debounce_count: 2
+      hysteresis_threshold: 0.75
+      dedup_window_ms: 600
+      ttl_ms: 2500
+    
+    gaze_sustained_detected:
+      cooldown_ms: 1500           # Moderate cooldown for gaze
+      debounce_count: 2
+      hysteresis_threshold: 0.7
+      dedup_window_ms: 500
+      ttl_ms: 2000
+    
+    loud_sound_detected:
+      cooldown_ms: 2000           # Prevent spam from audio
+      debounce_count: 2
+      hysteresis_threshold: 0.65  # More lenient for audio
+      dedup_window_ms: 300
+      ttl_ms: 2000
+    
+    motion_detected:
+      cooldown_ms: 1000           # Quick re-trigger for motion
+      debounce_count: 1           # Motion is fast, less debounce
+      hysteresis_threshold: 0.6
+      dedup_window_ms: 200
+      ttl_ms: 1500

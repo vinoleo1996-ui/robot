@@ -1,0 +1,23 @@
+{
+  "name": "loud_sound_hard_interrupt",
+  "description": "A safety alert should hard-interrupt the current attention behavior.",
+  "expected": {
+    "executed_behaviors": ["perform_attention", "perform_safety_alert"]
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "attention_scene",
+      "trace_id": "trace-attention-2",
+      "target_id": "user-attention",
+      "score_hint": 0.8
+    },
+    {
+      "type": "scene",
+      "scene_type": "safety_alert_scene",
+      "trace_id": "trace-safety-1",
+      "target_id": "user-attention",
+      "score_hint": 0.99
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+runtime:
+  project_root: .
+  log_level: INFO
+  trace_enabled: true
+  mock_drivers: true
+  fast_path_budget_ms: 35
+  fast_path_pending_limit: 64
+  max_scenes_per_cycle: 4
+  async_capture_enabled: false
+  async_capture_queue_limit: 2
+  async_perception_enabled: true
+  async_perception_queue_limit: 4
+  async_perception_result_max_age_ms: 140
+  async_perception_result_max_frame_lag: 3
+  async_executor_enabled: true
+  async_executor_queue_limit: 64
+  behavior_tick_enabled: false
+  behavior_tick_max_nodes: 1
+  enabled_pipelines:
+    - face
+    - gesture
+    - gaze
+    - audio
+    - motion

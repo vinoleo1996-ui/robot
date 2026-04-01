@@ -1,0 +1,8 @@
+resources:
+  required_default:
+    - HeadMotion
+    - FaceExpression
+  optional_default:
+    - AudioOut
+silent_mode:
+  suppress_audio: true

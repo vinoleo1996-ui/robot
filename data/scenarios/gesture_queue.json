@@ -1,0 +1,28 @@
+{
+  "scenario_id": "gesture_queue",
+  "name": "gesture_queue",
+  "title": "Gesture queue after greeting",
+  "category": "base",
+  "description": "greeting 执行过程中，gesture 以同优先级进入队列等待，不立即抢占。",
+  "expected": {
+    "executed_behaviors": ["perform_greeting"],
+    "pending_queue": 1,
+    "last_outcome": "queued"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-queue-1",
+      "target_id": "user-001",
+      "score_hint": 0.95
+    },
+    {
+      "type": "scene",
+      "scene_type": "gesture_bond_scene",
+      "trace_id": "trace-gesture-queue-1",
+      "target_id": "user-001",
+      "score_hint": 0.91
+    }
+  ]
+}

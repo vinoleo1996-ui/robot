@@ -1,0 +1,15 @@
+profile: desktop_4090
+environment: development
+gpu: rtx_4090
+slow_scene_model: qwen3_5_vl_2b_gguf
+runtime:
+  project_root: .
+  log_level: INFO
+  trace_enabled: true
+  mock_drivers: false
+  enabled_pipelines:
+    - face
+    - gesture
+    - gaze
+    - audio
+    - motion

@@ -1,0 +1,28 @@
+{
+  "name": "greeting_then_gesture",
+  "description": "Greeting executes first; same-priority gesture queues until the active greeting completes.",
+  "expected": {
+    "executed_behaviors": ["perform_greeting", "perform_gesture_response"],
+    "decision_outcomes": ["executed", "queued", "dequeued"]
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-greeting-1",
+      "target_id": "user-greeting",
+      "score_hint": 0.95
+    },
+    {
+      "type": "scene",
+      "scene_type": "gesture_bond_scene",
+      "trace_id": "trace-gesture-1",
+      "target_id": "user-gesture",
+      "score_hint": 0.92
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    }
+  ]
+}

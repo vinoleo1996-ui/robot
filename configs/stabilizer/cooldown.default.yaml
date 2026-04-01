@@ -1,0 +1,7 @@
+global_cooldown_sec: 8
+scene_cooldowns:
+  familiar_face_detected: 1800
+  gesture_detected: 10
+  gaze_hold_detected: 300
+  loud_sound_detected: 5
+  motion_attention_detected: 5

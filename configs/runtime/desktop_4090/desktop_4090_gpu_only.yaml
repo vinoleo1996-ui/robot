@@ -1,0 +1,11 @@
+profile: desktop_4090_gpu_only
+environment: development
+gpu: rtx_4090
+runtime:
+  project_root: .
+  log_level: INFO
+  trace_enabled: true
+  mock_drivers: false
+  enabled_pipelines:
+    - face
+    - motion

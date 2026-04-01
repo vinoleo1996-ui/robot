@@ -1,0 +1,33 @@
+{
+  "scenario_id": "replace_debounce_same_target",
+  "name": "replace_debounce_same_target",
+  "title": "Replace and debounce on same target",
+  "category": "boundary",
+  "description": "同一 target 在 batch window 内重复触发 greeting，不应制造重复执行。",
+  "expected": {
+    "executed_behaviors": ["perform_greeting"],
+    "pending_queue": 0,
+    "last_outcome": "debounced"
+  },
+  "steps": [
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-replace-1",
+      "target_id": "user-repeat",
+      "score_hint": 0.95
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 10
+    },
+    {
+      "type": "scene",
+      "scene_type": "greeting_scene",
+      "trace_id": "trace-replace-2",
+      "target_id": "user-repeat",
+      "score_hint": 0.95
+    }
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "name": "cooldown_recovery",
+  "description": "A repeated familiar-face detection should be filtered during stabilizer cooldown and pass again after cooldown recovery.",
+  "expected": {
+    "executed_behaviors": ["perform_greeting", "perform_greeting"]
+  },
+  "steps": [
+    {
+      "type": "detection",
+      "trace_id": "trace-cooldown-1",
+      "detector": "mock_face",
+      "event_type": "familiar_face",
+      "confidence": 0.97,
+      "payload": {
+        "target_id": "user-cooldown",
+        "event_confidence": 0.97
+      }
+    },
+    {
+      "type": "control",
+      "action": "complete_active"
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 100
+    },
+    {
+      "type": "detection",
+      "trace_id": "trace-cooldown-2",
+      "detector": "mock_face",
+      "event_type": "familiar_face",
+      "confidence": 0.97,
+      "payload": {
+        "target_id": "user-cooldown",
+        "event_confidence": 0.97
+      }
+    },
+    {
+      "type": "control",
+      "action": "advance_ms",
+      "ms": 1600
+    },
+    {
+      "type": "detection",
+      "trace_id": "trace-cooldown-3",
+      "detector": "mock_face",
+      "event_type": "familiar_face",
+      "confidence": 0.97,
+      "payload": {
+        "target_id": "user-cooldown",
+        "event_confidence": 0.97
+      }
+    }
+  ]
+}
