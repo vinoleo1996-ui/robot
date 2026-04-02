@@ -1,0 +1,97 @@
+# Performance Baseline
+generated_at: 2026-04-02T06:14:26.733137+00:00
+
+## doctor
+duration_ms: 9
+returncode: 0
+stdout:
+Robot Life C++ Doctor
+  version: 0.1.0
+  platform: macos
+  module_migration: 79/79
+  [ok] config: configs/app.yaml
+  [ok] detector_config: configs/detectors.yaml
+  [ok] slow_scene_config: configs/slow_scene.yaml
+  [ok] stabilizer_config: configs/stabilizer.yaml
+  [ok] runtime_tuning_config: configs/runtime_tuning.yaml
+  [ok] deepstream_graph_config: configs/deepstream_4vision.yaml
+  [ok] profile_catalog: configs/profile_catalog.yaml
+  [ok] model_store: models
+  [ok] profile_registry: default=mac_debug_native
+  [ok] profile:mac_debug_native: native development profile
+  [ok] profile:linux_deepstream_4vision: DeepStream production profile
+  [ok] profile:linux_cpu_fallback_safe: safe CPU fallback profile
+  [ok] cuda_runtime: Built without CUDA toolkit
+  [ok] deepstream_runtime_hint: set DEEPSTREAM_DIR or install under /opt/nvidia/deepstream/deepstream
+  [ok] deepstream_app: /opt/nvidia/deepstream/deepstream/bin/deepstream-app
+  [ok] deepstream_metadata_bridge: /tmp/robot_life_cpp_deepstream_metadata.ndjson
+  [note] DeepStream production backend targets Linux + NVIDIA dGPU. This host can still use the native/mac development profile.
+
+## run_live_native
+duration_ms: 9
+returncode: 0
+stdout:
+[launcher] phase=starting detail=launcher boot
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=false state=starting detail=spawning perception backend
+[launcher] phase=ready detail=backend and core ready
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=true state=ready detail=native development backend placeholder
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] phase=stopping detail=launcher shutdown
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=true state=ready detail=native development backend placeholder
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] component=load_shedder healthy=true state=normal detail=normal
+[launcher] phase=stopped detail=launcher complete
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=false state=stopped detail=backend stopped
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] component=load_shedder healthy=true state=normal detail=normal
+[runtime] pending=0 stable_last_tick=0 scenes_last_tick=0
+[decision] none
+
+## run_live_deepstream_mock
+duration_ms: 54
+returncode: 0
+stdout:
+[launcher] phase=starting detail=launcher boot
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=false state=starting detail=spawning perception backend
+[launcher] phase=ready detail=backend and core ready
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=true state=ready detail=mock detections streaming
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] phase=stopping detail=launcher shutdown
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=true state=ready detail=mock detections streaming
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] component=load_shedder healthy=false state=warning detail=elevated_load
+[launcher] phase=stopped detail=launcher complete
+[launcher] component=env healthy=true state=ready detail=local environment validated
+[launcher] component=tuning healthy=true state=ready detail=configs/runtime_tuning.yaml
+[launcher] component=backend healthy=false state=stopped detail=backend stopped
+[launcher] component=core healthy=true state=ready detail=live loop initialized
+[launcher] component=ui healthy=true state=disabled detail=debug ui skipped
+[launcher] component=load_shedder healthy=false state=warning detail=elevated_load
+[runtime] pending=0 stable_last_tick=0 scenes_last_tick=0
+[decision] none
+stderr:
+[graph-plan] name=deepstream_four_vision branches=4 share_preprocess=true share_tracker=true valid=true
+[graph-plan] branch=face enabled=true plugin=nvinfer stage=detect_track_embed device=cuda:0 model=models/deepstream/face/pgie_face.txt model_exists=true shared_tracker=true
+[graph-plan] branch=pose_gesture enabled=true plugin=nvinfer stage=detect_keypoints_gesture device=cuda:0 model=models/deepstream/pose/pgie_pose.txt model_exists=true shared_tracker=true
+[graph-plan] branch=motion enabled=true plugin=custom_motion stage=frame_delta_motion device=cuda:0 model=models/deepstream/motion/motion_config.txt model_exists=true shared_tracker=false
+[graph-plan] branch=scene_object enabled=true plugin=nvinfer stage=detect_scene_context device=cuda:0 model=models/deepstream/scene/pgie_scene.txt model_exists=true shared_tracker=true
+[graph-plan] wrote_app_config path=/tmp/robot_life_cpp_deepstream_app.txt

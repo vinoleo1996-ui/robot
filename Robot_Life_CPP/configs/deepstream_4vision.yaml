@@ -1,0 +1,48 @@
+graph_name: deepstream_four_vision
+share_preprocess: true
+share_tracker: true
+max_detections_per_frame: 4
+
+branch.face.enabled: true
+branch.face.sample_interval_frames: 1
+branch.face.detector: deepstream_face
+branch.face.event_type: face_detected
+branch.face.track_kind: face
+branch.face.confidence_hint: 0.94
+branch.face.plugin: nvinfer
+branch.face.model_config_path: models/deepstream/face/pgie_face.txt
+branch.face.binding_stage: detect_track_embed
+branch.face.device: cuda:0
+
+branch.pose_gesture.enabled: true
+branch.pose_gesture.sample_interval_frames: 2
+branch.pose_gesture.detector: deepstream_pose
+branch.pose_gesture.event_type: pose_detected
+branch.pose_gesture.track_kind: person
+branch.pose_gesture.confidence_hint: 0.92
+branch.pose_gesture.plugin: nvinfer
+branch.pose_gesture.model_config_path: models/deepstream/pose/pgie_pose.txt
+branch.pose_gesture.binding_stage: detect_keypoints_gesture
+branch.pose_gesture.device: cuda:0
+
+branch.motion.enabled: true
+branch.motion.sample_interval_frames: 1
+branch.motion.detector: deepstream_motion
+branch.motion.event_type: motion_detected
+branch.motion.track_kind: motion
+branch.motion.confidence_hint: 0.78
+branch.motion.plugin: custom_motion
+branch.motion.model_config_path: models/deepstream/motion/motion_config.txt
+branch.motion.binding_stage: frame_delta_motion
+branch.motion.device: cuda:0
+
+branch.scene_object.enabled: true
+branch.scene_object.sample_interval_frames: 3
+branch.scene_object.detector: deepstream_scene
+branch.scene_object.event_type: scene_context_detected
+branch.scene_object.track_kind: scene
+branch.scene_object.confidence_hint: 0.89
+branch.scene_object.plugin: nvinfer
+branch.scene_object.model_config_path: models/deepstream/scene/pgie_scene.txt
+branch.scene_object.binding_stage: detect_scene_context
+branch.scene_object.device: cuda:0

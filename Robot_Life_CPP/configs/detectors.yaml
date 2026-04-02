@@ -1,0 +1,15 @@
+version: 1
+
+vision:
+  face:
+    event_types: [face_detected, familiar_face_detected, face_attention_detected]
+  pose:
+    event_types: [pose_detected, gesture_detected, wave_detected]
+  motion:
+    event_types: [motion_detected, approaching_detected, leaving_detected]
+  scene:
+    event_types: [scene_context_detected, person_present_detected, object_detected]
+
+audio:
+  enabled: true
+  event_types: [speech_activity, voice_detected]

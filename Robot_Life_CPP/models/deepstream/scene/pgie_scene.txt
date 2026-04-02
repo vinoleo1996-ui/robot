@@ -1,0 +1,10 @@
+# DeepStream scene/object branch template.
+
+[property]
+network-type=detector
+model-color-format=0
+labelfile-path=labels_scene.txt
+model-engine-file=scene.engine
+group-classes=person,animal,other
+batch-size=1
+gpu-id=0

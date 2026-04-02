@@ -1,0 +1,11 @@
+version: 1
+
+runtime:
+  profile_catalog: configs/profile_catalog.yaml
+  active_profile: mac_debug_native
+  state_transport: http
+  state_endpoint: /api/state
+
+paths:
+  model_root: models
+  logs_root: logs

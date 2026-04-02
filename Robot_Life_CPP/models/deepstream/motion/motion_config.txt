@@ -1,0 +1,8 @@
+# DeepStream motion branch template.
+
+[property]
+network-type=custom-motion
+model-engine-file=motion.engine
+motion-threshold=0.35
+batch-size=1
+gpu-id=0

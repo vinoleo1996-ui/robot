@@ -1,0 +1,4 @@
+[tracker]
+tracker-width=640
+tracker-height=384
+enable-batch-process=1

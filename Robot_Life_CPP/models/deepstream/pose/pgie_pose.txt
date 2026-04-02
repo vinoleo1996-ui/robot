@@ -1,0 +1,9 @@
+# DeepStream pose/gesture branch template.
+
+[property]
+network-type=pose
+model-color-format=0
+labelfile-path=labels_pose.txt
+model-engine-file=pose.engine
+batch-size=1
+gpu-id=0

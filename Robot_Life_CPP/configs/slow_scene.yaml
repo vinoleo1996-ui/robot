@@ -1,0 +1,6 @@
+version: 1
+
+slow_scene:
+  enabled: true
+  sample_period_ms: 500
+  max_queue_size: 8

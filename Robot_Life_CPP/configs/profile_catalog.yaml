@@ -1,0 +1,213 @@
+version: 2
+default_profile: mac_debug_native
+
+profiles:
+  mac_debug_native:
+    description: "Native development profile for macOS or non-NVIDIA workstations"
+    backend: native
+    target_platform: macos
+    model_root: models/native
+    perception:
+      face:
+        enabled: true
+        backend: insightface_cpu
+        device: cpu
+      audio:
+        enabled: true
+        backend: silero_vad_faster_whisper_cpu
+        device: cpu
+      motion:
+        enabled: true
+        backend: optical_flow
+        device: cpu
+      pose:
+        enabled: true
+        backend: yolo_pose_cpu
+        device: cpu
+      scene:
+        enabled: true
+        backend: slow_scene_worker
+        device: cpu
+    runtime:
+      tick_hz: 20
+      max_pending_events: 768
+      load_shedding: aggressive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state
+
+  linux_deepstream_4vision:
+    description: "Linux + NVIDIA dGPU DeepStream profile for four-vision production"
+    backend: deepstream
+    target_platform: linux
+    model_root: models/deepstream
+    perception:
+      face:
+        enabled: true
+        backend: deepstream_face_trt
+        device: cuda:0
+      audio:
+        enabled: false
+        backend: external_audio_worker
+        device: cpu
+      motion:
+        enabled: true
+        backend: deepstream_motion
+        device: cuda:0
+      pose:
+        enabled: true
+        backend: deepstream_pose_trt
+        device: cuda:0
+      scene:
+        enabled: true
+        backend: deepstream_scene_trt
+        device: cuda:0
+    runtime:
+      tick_hz: 30
+      max_pending_events: 1024
+      load_shedding: adaptive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state
+
+  linux_cpu_fallback_safe:
+    description: "Linux safe fallback profile when CUDA or DeepStream is unavailable"
+    backend: native
+    target_platform: linux
+    model_root: models/native
+    perception:
+      face:
+        enabled: true
+        backend: insightface_cpu
+        device: cpu
+      audio:
+        enabled: true
+        backend: silero_vad_faster_whisper_cpu
+        device: cpu
+      motion:
+        enabled: true
+        backend: optical_flow
+        device: cpu
+      pose:
+        enabled: true
+        backend: yolo_pose_cpu
+        device: cpu
+      scene:
+        enabled: true
+        backend: slow_scene_worker
+        device: cpu
+    runtime:
+      tick_hz: 20
+      max_pending_events: 768
+      load_shedding: aggressive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state
+
+  cpu_debug:
+    description: "Alias profile for local CPU-first debugging"
+    backend: native
+    target_platform: macos
+    model_root: models/native
+    perception:
+      face:
+        enabled: true
+        backend: insightface_cpu
+        device: cpu
+      audio:
+        enabled: true
+        backend: silero_vad_faster_whisper_cpu
+        device: cpu
+      motion:
+        enabled: true
+        backend: optical_flow
+        device: cpu
+      pose:
+        enabled: true
+        backend: yolo_pose_cpu
+        device: cpu
+      scene:
+        enabled: true
+        backend: slow_scene_worker
+        device: cpu
+    runtime:
+      tick_hz: 20
+      max_pending_events: 768
+      load_shedding: aggressive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state
+
+  deepstream_prod:
+    description: "Alias profile for Linux DeepStream production"
+    backend: deepstream
+    target_platform: linux
+    model_root: models/deepstream
+    perception:
+      face:
+        enabled: true
+        backend: deepstream_face_trt
+        device: cuda:0
+      audio:
+        enabled: false
+        backend: external_audio_worker
+        device: cpu
+      motion:
+        enabled: true
+        backend: deepstream_motion
+        device: cuda:0
+      pose:
+        enabled: true
+        backend: deepstream_pose_trt
+        device: cuda:0
+      scene:
+        enabled: true
+        backend: deepstream_scene_trt
+        device: cuda:0
+    runtime:
+      tick_hz: 30
+      max_pending_events: 1024
+      load_shedding: adaptive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state
+
+  fallback_safe:
+    description: "Alias profile for safe CPU fallback"
+    backend: native
+    target_platform: linux
+    model_root: models/native
+    perception:
+      face:
+        enabled: true
+        backend: insightface_cpu
+        device: cpu
+      audio:
+        enabled: true
+        backend: silero_vad_faster_whisper_cpu
+        device: cpu
+      motion:
+        enabled: true
+        backend: optical_flow
+        device: cpu
+      pose:
+        enabled: true
+        backend: yolo_pose_cpu
+        device: cpu
+      scene:
+        enabled: true
+        backend: slow_scene_worker
+        device: cpu
+    runtime:
+      tick_hz: 20
+      max_pending_events: 768
+      load_shedding: aggressive
+    ui_debug:
+      enabled: false
+      transport: http
+      path: /api/state

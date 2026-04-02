@@ -1,0 +1,25 @@
+{
+  "schema": "robot_life_cpp.perf_thresholds.v1",
+  "generated_at": "2026-04-01T16:17:22.319417+00:00",
+  "root": "/Users/zheliu/Desktop/robot_life_dev/Robot_Life_CPP",
+  "cases": [
+    {
+      "name": "doctor",
+      "reference_duration_ms": 4,
+      "max_duration_ms": 100,
+      "max_regression_pct": 2.5
+    },
+    {
+      "name": "run_live_native",
+      "reference_duration_ms": 4,
+      "max_duration_ms": 100,
+      "max_regression_pct": 2.5
+    },
+    {
+      "name": "run_live_deepstream_mock",
+      "reference_duration_ms": 42,
+      "max_duration_ms": 126,
+      "max_regression_pct": 2.5
+    }
+  ]
+}

@@ -12,3 +12,6 @@ logs/*
 runtime/benchmarks/*.json
 *.log
 models/audio/panns/Cnn14_mAP=0.431.pth
+Robot_Life_CPP/build/
+Robot_Life_CPP/build_*/
+Robot_Life_CPP/logs/

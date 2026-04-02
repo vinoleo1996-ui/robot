@@ -1,0 +1,11 @@
+# DeepStream face branch template.
+# Runtime environments must replace engine and tracker assets with hardware-built artifacts.
+
+[property]
+network-type=detector
+model-color-format=0
+labelfile-path=labels_face.txt
+model-engine-file=face.engine
+tracker-config-file=tracker_face.txt
+batch-size=1
+gpu-id=0
