@@ -34,12 +34,15 @@ class TargetGovernor:
         self,
         *,
         switch_margin: float = 0.15,
-        owner_stale_after_s: float = 2.0,
+        owner_stale_after_s: float = 2.8,
+        owner_min_hold_s: float = 2.4,
     ) -> None:
         self.switch_margin = max(0.0, float(switch_margin))
         self.owner_stale_after_s = max(0.1, float(owner_stale_after_s))
+        self.owner_min_hold_s = max(0.1, float(owner_min_hold_s))
         self._owner_target_id: str | None = None
         self._owner_seen_at = 0.0
+        self._owner_locked_at = 0.0
 
     @property
     def owner_target_id(self) -> str | None:
@@ -52,8 +55,12 @@ class TargetGovernor:
             "owner_age_ms": round(max(0.0, (monotonic() - self._owner_seen_at) * 1000.0), 3)
             if self._owner_seen_at
             else None,
+            "owner_lock_age_ms": round(max(0.0, (monotonic() - self._owner_locked_at) * 1000.0), 3)
+            if self._owner_locked_at
+            else None,
             "switch_margin": self.switch_margin,
             "owner_stale_after_s": self.owner_stale_after_s,
+            "owner_min_hold_s": self.owner_min_hold_s,
         }
 
     def govern(
@@ -76,6 +83,7 @@ class TargetGovernor:
         hinted_target = _normalized_target(active_target_id) or _normalized_target(interaction_snapshot.get("target_id"))
         social_scenes = [scene for scene in scenes if _is_social_scene(scene)]
         if not social_scenes:
+            self._release_if_stale()
             return TargetGovernanceDecision(
                 owner_target_id=self._owner_target_id,
                 accepted=list(scenes),
@@ -90,21 +98,34 @@ class TargetGovernor:
         best_target = _normalized_target(best_social.target_id)
         switched = False
         reason = "sticky_owner"
+        now = monotonic()
+        owner_stale = bool(self._owner_seen_at and (now - self._owner_seen_at) > self.owner_stale_after_s)
+        owner_locked_recently = bool(
+            self._owner_locked_at and (now - self._owner_locked_at) < self.owner_min_hold_s
+        )
 
         if owner_scene is None:
-            owner_target = best_target
-            owner_scene = best_social
-            switched = owner_target != self._owner_target_id
-            reason = "adopt_best_target"
-        elif best_target and best_target != owner_target:
-            owner_score = _scene_rank(owner_scene)[0]
-            challenger_score = _scene_rank(best_social)[0]
-            owner_stale = self._owner_seen_at and (monotonic() - self._owner_seen_at) > self.owner_stale_after_s
-            if owner_stale or challenger_score >= owner_score + self.switch_margin:
+            if self._owner_target_id and not owner_stale:
+                owner_target = self._owner_target_id
+                reason = "hold_missing_owner"
+            else:
                 owner_target = best_target
                 owner_scene = best_social
                 switched = owner_target != self._owner_target_id
-                reason = "switch_higher_priority_target" if not owner_stale else "switch_stale_owner"
+                reason = "adopt_best_target"
+        elif best_target and best_target != owner_target:
+            owner_score = _scene_rank(owner_scene)[0]
+            challenger_score = _scene_rank(best_social)[0]
+            if owner_stale:
+                owner_target = best_target
+                owner_scene = best_social
+                switched = owner_target != self._owner_target_id
+                reason = "switch_stale_owner"
+            elif not owner_locked_recently and challenger_score >= owner_score + self.switch_margin:
+                owner_target = best_target
+                owner_scene = best_social
+                switched = owner_target != self._owner_target_id
+                reason = "switch_higher_priority_target"
 
         accepted: list[SceneCandidate] = []
         suppressed: list[SceneCandidate] = []
@@ -118,8 +139,13 @@ class TargetGovernor:
                 suppressed.append(_mark_scene(scene, owner_target, accepted=False, reason="ownership_filtered"))
 
         if owner_target is not None:
+            if owner_target != self._owner_target_id:
+                self._owner_locked_at = now
             self._owner_target_id = owner_target
-            self._owner_seen_at = monotonic()
+            if owner_scene is not None:
+                self._owner_seen_at = now
+        else:
+            self._release_if_stale(force=True)
 
         return TargetGovernanceDecision(
             owner_target_id=owner_target,
@@ -128,6 +154,14 @@ class TargetGovernor:
             reason=reason,
             switched=switched,
         )
+
+    def _release_if_stale(self, *, force: bool = False) -> None:
+        if self._owner_target_id is None:
+            return
+        if force or (self._owner_seen_at and (monotonic() - self._owner_seen_at) > self.owner_stale_after_s):
+            self._owner_target_id = None
+            self._owner_seen_at = 0.0
+            self._owner_locked_at = 0.0
 
 
 def _is_social_scene(scene: SceneCandidate) -> bool:

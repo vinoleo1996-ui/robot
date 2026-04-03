@@ -8,12 +8,14 @@ from collections import deque
 from dataclasses import dataclass, field
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from threading import Event, Lock, Thread
 from time import monotonic, strftime
 from typing import Any, Deque, Union, Optional
 from urllib.parse import urlparse
 
 from robot_life.perception.frame_dispatch import as_bgr_frame
+from robot_life.runtime.face_registry import LocalFaceRegistry
 from robot_life.runtime.live_loop import LiveLoop, LiveLoopResult
 
 try:  # pragma: no cover - optional visualization dependency
@@ -38,6 +40,9 @@ except Exception:  # pragma: no cover - optional dependency
 
 
 logger = logging.getLogger(__name__)
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_UI_TEMPLATE_PATH = Path(__file__).with_name("ui_demo_shell.html")
+_FACE_LIBRARY_DIR = _REPO_ROOT / "runtime" / "face_registry"
 
 
 def _round(value: float) -> float:
@@ -157,6 +162,62 @@ def _short_trace(trace_id: str) -> str:
     if len(value) <= 8:
         return value or "-"
     return value[-8:]
+
+
+def _resolve_primary_interaction_summary(
+    life_state_snapshot: dict[str, Any],
+    face_catalog: list[dict[str, Any]],
+) -> dict[str, Any]:
+    interaction = life_state_snapshot.get("interaction", {}) if isinstance(life_state_snapshot, dict) else {}
+    governor = life_state_snapshot.get("target_governor", {}) if isinstance(life_state_snapshot, dict) else {}
+    tracker = life_state_snapshot.get("entity_tracker", {}) if isinstance(life_state_snapshot, dict) else {}
+    owner_target_id = str(governor.get("owner_target_id") or interaction.get("current_target_id") or "").strip() or None
+    tracks = tracker.get("tracks", []) if isinstance(tracker, dict) else []
+    identity_hint = None
+    modalities: list[str] = []
+    detection_count = None
+    for track in tracks:
+        if not isinstance(track, dict):
+            continue
+        if str(track.get("track_id") or "").strip() != owner_target_id:
+            continue
+        identity_hint = str(track.get("identity_hint") or "").strip() or None
+        modalities = list(track.get("modalities") or [])
+        detection_count = track.get("detection_count")
+        break
+
+    display_name = identity_hint or owner_target_id or "未锁定"
+    face_id = None
+    description = ""
+    for item in face_catalog:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id") or "").strip()
+        item_name = str(item.get("name") or "").strip()
+        if item_id and item_id == identity_hint:
+            display_name = item_name or display_name
+            face_id = item_id
+            description = str(item.get("description") or "")
+            break
+        if item_id and item_id == owner_target_id:
+            display_name = item_name or display_name
+            face_id = item_id
+            description = str(item.get("description") or "")
+            break
+
+    interaction_state = str(interaction.get("current_state") or interaction.get("state") or "IDLE")
+    return {
+        "owner_target_id": owner_target_id,
+        "display_name": display_name,
+        "face_id": face_id,
+        "description": description,
+        "interaction_state": interaction_state,
+        "owner_age_ms": governor.get("owner_age_ms"),
+        "owner_lock_age_ms": governor.get("owner_lock_age_ms"),
+        "modalities": modalities,
+        "detection_count": detection_count,
+        "is_locked": owner_target_id is not None,
+    }
 
 
 def _collect_gpu_metrics() -> dict[str, Any]:
@@ -377,7 +438,10 @@ def _resolve_pipeline_detector(loop: LiveLoop, pipeline_name: str) -> Any | None
         return None
     if pipeline is None:
         return None
-    return getattr(pipeline, "_detector", None)
+    detector = getattr(pipeline, "_detector", None)
+    if detector is not None:
+        return detector
+    return getattr(pipeline, "_face_detector", None)
 
 
 def _resolve_runtime_stabilizer(loop: LiveLoop) -> Any | None:
@@ -1788,7 +1852,12 @@ def _build_lightweight_dashboard_html(*, refresh_ms: int) -> str:
 
 
 def build_dashboard_html(*, refresh_ms: int) -> str:
-    return _build_lightweight_dashboard_html(refresh_ms=refresh_ms)
+    try:
+        template = _UI_TEMPLATE_PATH.read_text(encoding="utf-8")
+        return template.replace("__REFRESH_MS__", str(max(180, int(refresh_ms))))
+    except Exception:
+        logger.exception("failed to load ui demo template, fallback to inline dashboard")
+        return _build_lightweight_dashboard_html(refresh_ms=refresh_ms)
     return f"""<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -2788,6 +2857,7 @@ class DashboardState:
     _startup_state: str = field(default="booting", init=False)
     _startup_message: str = field(default="dashboard_booting", init=False)
     _startup_state_changed_at: float = field(default_factory=monotonic, init=False)
+    _face_catalog: list[dict[str, Any]] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         env_hold = os.getenv("ROBOT_LIFE_REACTION_HOLD_S")
@@ -2929,6 +2999,14 @@ class DashboardState:
                 }
             )
         return resolved
+
+    def set_face_catalog(self, items: list[dict[str, Any]]) -> None:
+        with self._lock:
+            self._face_catalog = list(items)
+
+    def push_feed(self, text: str, *, level: str = "warn") -> None:
+        with self._lock:
+            self._feed.appendleft({"time": _now_label(), "text": text, "level": level})
 
     def _remember_trace_pipeline(self, trace_id: str, pipeline_name: str) -> None:
         if not trace_id:
@@ -3495,6 +3573,8 @@ class DashboardState:
                 pipeline_statuses.append(item)
             runtime_resources = dict(self._runtime_resource_snapshot)
             startup_elapsed_ms = _round(max(0.0, (now - self._startup_state_changed_at) * 1000.0))
+            face_catalog = list(self._face_catalog)
+            primary_interaction = _resolve_primary_interaction_summary(self._life_state_snapshot, face_catalog)
 
             pipeline_monitors: list[dict[str, Any]] = []
             pipeline_stats = dict(self._pipeline_event_stats)
@@ -3660,6 +3740,8 @@ class DashboardState:
                 "motion_min_area_ratio": self._runtime_tuning_snapshot.get("motion_min_area_ratio"),
                 "slow_reaction": slow_reaction_snapshot,
                 "slow_scene": self._slow_scene_snapshot,
+                "primary_interaction": primary_interaction,
+                "faces": face_catalog,
                 "source_health": source_health,
                 "cpu_percent": runtime_resources.get("cpu_percent", 0.0),
                 "mem_percent": runtime_resources.get("mem_percent", 0.0),
@@ -3686,6 +3768,7 @@ class DashboardState:
             source_payloads = {
                 name: dict(payload) for name, payload in self._source_health.items()
             }
+            face_catalog = list(self._face_catalog)
             latest_reaction = dict(self._latest_reaction)
             latest_detections = list(self._latest_detections)[:8]
             latest_scenes = list(self._latest_scenes)[:6]
@@ -3765,6 +3848,7 @@ class DashboardState:
         source_health.sort(key=lambda item: item["name"])
         runtime_resources = dict(self._runtime_resource_snapshot)
         startup_elapsed_ms = _round(max(0.0, (now - self._startup_state_changed_at) * 1000.0))
+        primary_interaction = _resolve_primary_interaction_summary(self._life_state_snapshot, face_catalog)
 
         return {
             "mode": self.mode,
@@ -3794,6 +3878,9 @@ class DashboardState:
             "feed": feed,
             "pipeline_statuses": pipelines,
             "pipelines": pipelines,
+            "primary_interaction": primary_interaction,
+            "interaction_state": primary_interaction.get("interaction_state"),
+            "faces": face_catalog,
             "source_health": source_health,
             "sources": source_health,
             "cpu_percent": runtime_resources.get("cpu_percent", 0.0),
@@ -3970,7 +4057,13 @@ def _apply_runtime_tuning(state: DashboardState, loop: LiveLoop, payload: dict[s
     return applied
 
 
-def _make_handler(state: DashboardState, loop: LiveLoop, *, html: str) -> type[BaseHTTPRequestHandler]:
+def _make_handler(
+    state: DashboardState,
+    loop: LiveLoop,
+    *,
+    html: str,
+    face_registry: LocalFaceRegistry | None = None,
+) -> type[BaseHTTPRequestHandler]:
     class DashboardHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib API
             parsed = urlparse(self.path)
@@ -4014,13 +4107,48 @@ def _make_handler(state: DashboardState, loop: LiveLoop, *, html: str) -> type[B
                 self.end_headers()
                 self.wfile.write(payload)
                 return
+            if parsed.path == "/api/faces":
+                data = json.dumps(
+                    {
+                        "ok": True,
+                        "faces": face_registry.list_profiles() if face_registry is not None else [],
+                    },
+                    ensure_ascii=False,
+                ).encode("utf-8")
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            if parsed.path.startswith("/api/face-image/"):
+                if face_registry is None:
+                    self.send_response(HTTPStatus.NOT_FOUND)
+                    self.end_headers()
+                    return
+                face_id = parsed.path.removeprefix("/api/face-image/").strip()
+                image_path = face_registry.image_file(face_id)
+                if image_path is None:
+                    self.send_response(HTTPStatus.NOT_FOUND)
+                    self.end_headers()
+                    return
+                payload = image_path.read_bytes()
+                content_type = "image/png" if image_path.suffix.lower() == ".png" else "image/jpeg"
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+                return
 
             self.send_response(HTTPStatus.NOT_FOUND)
             self.end_headers()
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib API
             parsed = urlparse(self.path)
-            if parsed.path != "/api/tuning":
+            if parsed.path not in {"/api/tuning", "/api/faces"}:
                 self.send_response(HTTPStatus.NOT_FOUND)
                 self.end_headers()
                 return
@@ -4044,16 +4172,59 @@ def _make_handler(state: DashboardState, loop: LiveLoop, *, html: str) -> type[B
                 self.wfile.write(data)
                 return
 
+            if parsed.path == "/api/faces":
+                face_detector = _resolve_pipeline_detector(loop, "face")
+                try:
+                    if face_registry is None:
+                        raise RuntimeError("face registry unavailable")
+                    profile = face_registry.register_face(
+                        name=str(payload.get("name") or ""),
+                        description=str(payload.get("description") or ""),
+                        image_data_url=str(payload.get("image_data_url") or ""),
+                        detector=face_detector,
+                    )
+                    state.set_face_catalog(face_registry.list_profiles())
+                    state.push_feed(f"已注册人物：{profile['name']}", level="ok")
+                    response_payload = {"ok": True, "profile": profile, "faces": face_registry.list_profiles()}
+                    status = HTTPStatus.OK
+                except Exception as exc:
+                    response_payload = {"ok": False, "error": str(exc)}
+                    status = HTTPStatus.BAD_REQUEST
+                data = json.dumps(response_payload, ensure_ascii=False).encode("utf-8")
+                self.send_response(status)
+                self.send_header("Content-Type", "application/json; charset=utf-8")
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
+
             applied = _apply_runtime_tuning(state, loop, payload)
-            data = json.dumps(
-                {
-                    "ok": True,
-                    "applied": applied,
-                    "snapshot": state.snapshot(),
-                },
-                ensure_ascii=False,
-            ).encode("utf-8")
+            data = json.dumps({"ok": True, "applied": applied, "snapshot": state.snapshot()}, ensure_ascii=False).encode("utf-8")
             self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_DELETE(self) -> None:  # noqa: N802 - stdlib API
+            parsed = urlparse(self.path)
+            if not parsed.path.startswith("/api/faces/"):
+                self.send_response(HTTPStatus.NOT_FOUND)
+                self.end_headers()
+                return
+            if face_registry is None:
+                self.send_response(HTTPStatus.NOT_FOUND)
+                self.end_headers()
+                return
+            face_id = parsed.path.removeprefix("/api/faces/").strip()
+            removed = face_registry.delete_face(face_id, detector=_resolve_pipeline_detector(loop, "face"))
+            if removed:
+                state.set_face_catalog(face_registry.list_profiles())
+                state.push_feed(f"已移除人物：{face_id}", level="warn")
+            data = json.dumps({"ok": removed, "faces": face_registry.list_profiles()}, ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK if removed else HTTPStatus.NOT_FOUND)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
@@ -4101,8 +4272,10 @@ def run_ui_dashboard(
         current_stabilizer=current_stabilizer,
         slow_frame_interval_s=slow_frame_interval_s,
     )
+    face_registry = LocalFaceRegistry(_FACE_LIBRARY_DIR)
+    state.set_face_catalog(face_registry.list_profiles())
     html = build_dashboard_html(refresh_ms=max(120, int(refresh_ms)))
-    handler = _make_handler(state, loop, html=html)
+    handler = _make_handler(state, loop, html=html, face_registry=face_registry)
     server = ThreadingHTTPServer((host, int(port)), handler)
     server.timeout = 0.5
     server_thread = Thread(
@@ -4120,6 +4293,9 @@ def run_ui_dashboard(
         state.start_preview_worker()
         state.set_startup_state("initializing", "opening_sources_and_pipelines")
         loop.start()
+        face_detector = _resolve_pipeline_detector(loop, "face")
+        face_registry.sync_detector(face_detector)
+        state.set_face_catalog(face_registry.list_profiles())
         state.set_startup_state("running", "runtime_ready")
         state.update_observability(loop, min_interval_s=0.0)
         while not stop_event.is_set():

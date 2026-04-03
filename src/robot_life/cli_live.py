@@ -306,7 +306,7 @@ def run_live(
     registry = build_pipeline_registry(
         app_config.runtime.enabled_pipelines,
         detector_cfg,
-        mock_drivers=app_config.runtime.mock_drivers,
+        mock_drivers=False,
     )
     dependencies, _, slow_scene = _build_live_dependencies(
         runtime_cfg=app_config.runtime,
@@ -455,7 +455,7 @@ def ui_demo(
     registry = build_pipeline_registry(
         app_config.runtime.enabled_pipelines,
         detector_cfg,
-        mock_drivers=app_config.runtime.mock_drivers,
+        mock_drivers=False,
     )
     dependencies, _, _ = _build_live_dependencies(
         runtime_cfg=app_config.runtime,

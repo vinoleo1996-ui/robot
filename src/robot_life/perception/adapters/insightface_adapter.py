@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from threading import Lock
 from typing import Any
 
 from robot_life.common.cuda_runtime import ensure_cuda_runtime_loaded
@@ -34,6 +35,7 @@ class InsightFaceFaceDetector(DetectorBase):
         self._recognizer = None
         self._db_embeddings = {}  # Known face embeddings
         self._recognition_threshold = self.config.get("recognition_threshold", 0.6)
+        self._runtime_lock = Lock()
 
     def initialize(self) -> None:
         """Load InsightFace models."""
@@ -103,7 +105,8 @@ class InsightFaceFaceDetector(DetectorBase):
         try:
             # FaceAnalysis path
             if self._analysis is not None:
-                faces = self._analysis.get(frame_bgr)
+                with self._runtime_lock:
+                    faces = self._analysis.get(frame_bgr)
                 for idx, face in enumerate(faces or []):
                     bbox_obj = getattr(face, "bbox", None)
                     if bbox_obj is None:
@@ -144,7 +147,8 @@ class InsightFaceFaceDetector(DetectorBase):
                 return []
 
             # Legacy model_zoo path
-            faces = self._detector.detect(frame_bgr, threshold=self.config.get("det_thresh", 0.5))
+            with self._runtime_lock:
+                faces = self._detector.detect(frame_bgr, threshold=self.config.get("det_thresh", 0.5))
 
             if faces is None or len(faces) == 0:
                 return []
@@ -161,8 +165,9 @@ class InsightFaceFaceDetector(DetectorBase):
                 if confidence > 0.7 and self._recognizer is not None:
                     try:
                         # Get face embedding
-                        self._recognizer.get_feat(frame_bgr, face)
-                        embedding = face.embedding
+                        with self._runtime_lock:
+                            self._recognizer.get_feat(frame_bgr, face)
+                            embedding = face.embedding
 
                         # Compare with known faces
                         is_similar = self._match_embedding(embedding)
@@ -201,6 +206,49 @@ class InsightFaceFaceDetector(DetectorBase):
     def add_known_face(self, face_id: str, embedding: Any) -> None:
         """Register a known face."""
         self._db_embeddings[face_id] = embedding
+
+    def clear_known_faces(self) -> None:
+        """Clear all registered faces."""
+        self._db_embeddings.clear()
+
+    def set_known_faces(self, embeddings: dict[str, Any]) -> None:
+        """Replace the in-memory face registry."""
+        self._db_embeddings = dict(embeddings)
+
+    def known_face_count(self) -> int:
+        return len(self._db_embeddings)
+
+    def extract_reference_embedding(self, frame: Any) -> tuple[Any, list[int]]:
+        """Extract one reference embedding from an uploaded face image."""
+        if not self._initialized:
+            raise RuntimeError("insightface_face detector is not initialized")
+
+        frame_bgr = as_bgr_frame(frame)
+        if frame_bgr is None or not hasattr(frame_bgr, "shape"):
+            raise ValueError("invalid image payload")
+
+        if self._analysis is None:
+            raise RuntimeError("reference embedding requires FaceAnalysis backend")
+
+        with self._runtime_lock:
+            faces = self._analysis.get(frame_bgr)
+        if not faces:
+            raise ValueError("no face detected in uploaded image")
+
+        def _face_area(face: Any) -> float:
+            bbox_obj = getattr(face, "bbox", None)
+            if bbox_obj is None:
+                return 0.0
+            x1, y1, x2, y2 = bbox_obj.astype(int)
+            return float(max(0, x2 - x1) * max(0, y2 - y1))
+
+        selected = max(faces, key=_face_area)
+        embedding = getattr(selected, "embedding", None)
+        bbox_obj = getattr(selected, "bbox", None)
+        if embedding is None or bbox_obj is None:
+            raise ValueError("face embedding unavailable for uploaded image")
+        bbox = bbox_obj.astype(int).tolist()
+        return embedding, bbox
 
     def _match_embedding(self, embedding: Any) -> bool:
         """Check if embedding matches any known face."""

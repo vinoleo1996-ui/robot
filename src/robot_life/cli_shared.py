@@ -31,7 +31,7 @@ def _default_detector_config_path() -> Path:
         / "configs"
         / "detectors"
         / "local"
-        / "local_mac_fast_reaction.yaml"
+        / "local_mac_companion_demo.yaml"
     )
 
 

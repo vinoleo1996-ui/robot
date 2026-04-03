@@ -1,0 +1,690 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robot Companion Demo</title>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(11, 20, 39, 0.82);
+      --panel-strong: rgba(14, 27, 49, 0.96);
+      --muted: #91a0bc;
+      --text: #f3f6ff;
+      --line: rgba(130, 157, 208, 0.18);
+      --accent: #78a6ff;
+      --accent-2: #59e1c4;
+      --warn: #ffcf6e;
+      --bad: #ff7289;
+      --good: #5fe0b6;
+      --shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "SF Pro Display", "PingFang SC", "Noto Sans SC", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(120, 166, 255, 0.18), transparent 28%),
+        radial-gradient(circle at top right, rgba(89, 225, 196, 0.12), transparent 24%),
+        linear-gradient(180deg, #0b1323 0%, #07101d 100%);
+      color: var(--text);
+    }
+    .app {
+      width: min(1500px, calc(100vw - 24px));
+      margin: 12px auto;
+      display: grid;
+      gap: 12px;
+    }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 10px 4px;
+    }
+    .title {
+      font-size: clamp(24px, 3vw, 38px);
+      font-weight: 780;
+      letter-spacing: 0.02em;
+      margin: 0;
+    }
+    .subtitle {
+      color: var(--muted);
+      margin-top: 4px;
+      font-size: 13px;
+    }
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+    .chip {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.06);
+      color: var(--muted);
+      border-radius: 999px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(380px, 0.9fr);
+      gap: 12px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 26px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+    }
+    .stage {
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      min-height: 760px;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(120, 166, 255, 0.16), transparent 28%),
+        linear-gradient(180deg, rgba(7, 13, 26, 0.4), rgba(7, 13, 26, 0.92));
+    }
+    .stage-header,
+    .side-section {
+      padding: 18px 20px;
+    }
+    .stage-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+    }
+    .label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .focus-name {
+      font-size: 28px;
+      font-weight: 760;
+      line-height: 1.1;
+    }
+    .focus-desc {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .video-wrap {
+      position: relative;
+      padding: 20px;
+      display: grid;
+      align-items: stretch;
+    }
+    .video-shell {
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+      border: 1px solid rgba(120, 166, 255, 0.2);
+      background: linear-gradient(180deg, rgba(10, 18, 33, 0.85), rgba(7, 12, 23, 0.98));
+      min-height: 520px;
+    }
+    .video-shell img,
+    .video-empty {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+    }
+    .video-empty {
+      display: grid;
+      place-items: center;
+      color: var(--muted);
+      font-size: 16px;
+      background:
+        radial-gradient(circle at center, rgba(120, 166, 255, 0.1), transparent 36%),
+        linear-gradient(180deg, #0d1629, #0a1221);
+    }
+    .video-overlay {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 18px;
+    }
+    .overlay-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .overlay-card {
+      pointer-events: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(5, 9, 18, 0.58);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 16px;
+      font-size: 12px;
+      backdrop-filter: blur(8px);
+    }
+    .overlay-card strong { font-size: 14px; }
+    .stage-footer {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0 20px 20px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.04);
+      border-radius: 18px;
+      padding: 14px;
+    }
+    .metric .value {
+      font-size: 22px;
+      font-weight: 760;
+      margin-top: 8px;
+    }
+    .metric .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .sidebar {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .side-section {
+      border-bottom: 1px solid var(--line);
+    }
+    .side-section:last-child { border-bottom: none; }
+    .card-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+    .card-title h3 {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 720;
+    }
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+    .input,
+    .textarea,
+    .button {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
+      color: var(--text);
+      padding: 12px 14px;
+      font: inherit;
+    }
+    .textarea {
+      min-height: 78px;
+      resize: vertical;
+    }
+    .button {
+      cursor: pointer;
+      background: linear-gradient(135deg, rgba(120, 166, 255, 0.88), rgba(89, 225, 196, 0.72));
+      color: #07101d;
+      font-weight: 760;
+      border: none;
+    }
+    .button.secondary {
+      background: rgba(255,255,255,0.08);
+      color: var(--text);
+      border: 1px solid rgba(255,255,255,0.1);
+    }
+    .upload-preview {
+      min-height: 110px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,0.14);
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: rgba(255,255,255,0.03);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .upload-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .people-list,
+    .feed-list {
+      display: grid;
+      gap: 10px;
+      max-height: 290px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .person-item,
+    .feed-item {
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.04);
+      padding: 12px;
+    }
+    .person-item {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: start;
+    }
+    .person-item img {
+      width: 64px;
+      height: 64px;
+      object-fit: cover;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.06);
+    }
+    .person-name {
+      font-size: 15px;
+      font-weight: 720;
+      margin-bottom: 4px;
+    }
+    .person-desc,
+    .muted {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .delete-btn {
+      border: none;
+      background: rgba(255, 114, 137, 0.12);
+      color: #ffd8df;
+      padding: 8px 10px;
+      border-radius: 12px;
+      cursor: pointer;
+    }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 650;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.05);
+    }
+    .status-good { color: var(--good); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--bad); }
+    .robot-copy {
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .trace {
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.04);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      white-space: pre-wrap;
+    }
+    @media (max-width: 1180px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .stage {
+        min-height: auto;
+      }
+      .stage-footer {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 720px) {
+      .app {
+        width: min(100vw - 12px, 100%);
+        margin: 6px auto;
+      }
+      .stage-footer {
+        grid-template-columns: 1fr;
+      }
+      .person-item {
+        grid-template-columns: 56px minmax(0, 1fr);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div>
+        <h1 class="title">Robot Companion Demo</h1>
+        <div class="subtitle">复用 demo_play 的体验壳，直接做本地识脸、主交互锁定和即时体验。</div>
+      </div>
+      <div class="chips">
+        <div class="chip" id="chip-startup">启动中</div>
+        <div class="chip" id="chip-mode">mode=-</div>
+        <div class="chip" id="chip-runtime">camera=warming</div>
+      </div>
+    </div>
+
+    <div class="layout">
+      <section class="panel stage">
+        <div class="stage-header">
+          <div>
+            <div class="label">主交互对象</div>
+            <div class="focus-name" id="focus-name">未锁定</div>
+            <div class="focus-desc" id="focus-desc">等待主交互对象建立。识别到主交互人后，其它人事件会降级，直到主目标被释放。</div>
+          </div>
+          <div class="status-pill" id="focus-pill">IDLE</div>
+        </div>
+
+        <div class="video-wrap">
+          <div class="video-shell">
+            <img id="camera-preview" src="/api/camera_fast.jpg" alt="camera-preview" hidden />
+            <div class="video-empty" id="camera-empty">等待摄像头画面...</div>
+            <div class="video-overlay">
+              <div class="overlay-row">
+                <div class="overlay-card"><span>锁定对象</span><strong id="overlay-target">-</strong></div>
+                <div class="overlay-card"><span>交互状态</span><strong id="overlay-state">IDLE</strong></div>
+              </div>
+              <div class="overlay-row">
+                <div class="overlay-card"><span>机器人当前回应</span><strong id="overlay-reply">继续观察</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stage-footer">
+          <div class="metric">
+            <div class="label">FPS</div>
+            <div class="value" id="metric-fps">0.0</div>
+            <div class="sub" id="metric-latency">latency -</div>
+          </div>
+          <div class="metric">
+            <div class="label">主目标锁定</div>
+            <div class="value" id="metric-lock">-</div>
+            <div class="sub" id="metric-lock-note">等待进入互动</div>
+          </div>
+          <div class="metric">
+            <div class="label">识别人物数</div>
+            <div class="value" id="metric-faces">0</div>
+            <div class="sub" id="metric-detects">detections 0</div>
+          </div>
+          <div class="metric">
+            <div class="label">系统负载</div>
+            <div class="value" id="metric-cpu">0%</div>
+            <div class="sub" id="metric-gpu">gpu -</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <section class="panel">
+          <div class="side-section">
+            <div class="card-title">
+              <h3>本地人脸注册</h3>
+              <span class="muted">上传照片 + 人物描述</span>
+            </div>
+            <div class="stack">
+              <div class="upload-preview" id="upload-preview">选择照片后会在这里预览</div>
+              <input class="input" id="face-file" type="file" accept="image/*" />
+              <input class="input" id="face-name" type="text" placeholder="人物名称，例如：妈妈 / Leo" />
+              <textarea class="textarea" id="face-description" placeholder="对这个人物的补充描述，例如：家人、同事、喜欢聊天的话题"></textarea>
+              <button class="button" id="register-face-btn">注册到本地人脸库</button>
+              <div class="muted" id="upload-status">上传后会直接提取 embedding，并同步到本地人脸识别模型。</div>
+            </div>
+          </div>
+          <div class="side-section">
+            <div class="card-title">
+              <h3>已注册人物</h3>
+              <span class="muted" id="registered-count">0 人</span>
+            </div>
+            <div class="people-list" id="people-list">
+              <div class="muted">还没有本地人脸库人物。</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="side-section">
+            <div class="card-title">
+              <h3>机器人当前回应</h3>
+              <span class="muted" id="scene-route">route -</span>
+            </div>
+            <div class="robot-copy" id="robot-copy">等待首个稳定结果...</div>
+          </div>
+          <div class="side-section">
+            <div class="card-title">
+              <h3>主交互治理</h3>
+              <span class="muted">其它目标自动降级</span>
+            </div>
+            <div class="trace" id="governor-trace">等待目标锁定...</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="side-section">
+            <div class="card-title">
+              <h3>实时事件流</h3>
+              <span class="muted">最近状态</span>
+            </div>
+            <div class="feed-list" id="feed-list">
+              <div class="feed-item muted">等待运行时事件...</div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const REFRESH_MS = Number("__REFRESH_MS__");
+    let selectedImageDataUrl = "";
+    let cameraTick = 0;
+
+    function el(id) { return document.getElementById(id); }
+    function text(id, value) { const node = el(id); if (node) node.textContent = value; }
+    function fmtMs(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+      return `${Number(value).toFixed(0)}ms`;
+    }
+    function fmtPct(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+      return `${Number(value).toFixed(1)}%`;
+    }
+    function fmtNum(value) {
+      if (value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+      return Number(value).toFixed(1);
+    }
+    function statusClass(state) {
+      const normalized = String(state || "").toLowerCase();
+      if (["running", "ready", "ok"].includes(normalized)) return "status-good";
+      if (["failed", "bad", "error"].includes(normalized)) return "status-bad";
+      return "status-warn";
+    }
+
+    function renderFaces(faces) {
+      text("registered-count", `${faces.length || 0} 人`);
+      const root = el("people-list");
+      if (!faces || !faces.length) {
+        root.innerHTML = '<div class="muted">还没有本地人脸库人物。</div>';
+        return;
+      }
+      root.innerHTML = faces.map((item) => `
+        <div class="person-item">
+          <img src="/api/face-image/${encodeURIComponent(item.id)}?ts=${Date.now()}" alt="${item.name}" />
+          <div>
+            <div class="person-name">${item.name || item.id}</div>
+            <div class="person-desc">${item.description || "暂无人物描述"}</div>
+          </div>
+          <button class="delete-btn" data-face-delete="${item.id}">删除</button>
+        </div>
+      `).join("");
+      root.querySelectorAll("[data-face-delete]").forEach((node) => {
+        node.addEventListener("click", async () => {
+          const faceId = node.getAttribute("data-face-delete");
+          if (!faceId) return;
+          const resp = await fetch(`/api/faces/${encodeURIComponent(faceId)}`, { method: "DELETE" });
+          const data = await resp.json();
+          renderFaces(data.faces || []);
+        });
+      });
+    }
+
+    function renderFeed(state) {
+      const items = [...(state.feed || [])];
+      (state.latest_detections || []).slice(0, 3).forEach((item) => {
+        items.push({ time: item.time, text: `检测: ${item.event_type}`, level: "warn" });
+      });
+      const root = el("feed-list");
+      if (!items.length) {
+        root.innerHTML = '<div class="feed-item muted">等待运行时事件...</div>';
+        return;
+      }
+      root.innerHTML = items.slice(0, 10).map((item) => `
+        <div class="feed-item">
+          <div style="display:flex;justify-content:space-between;gap:8px;margin-bottom:6px;">
+            <strong>${item.time || "-"}</strong>
+            <span class="${statusClass(item.level)}">${item.level || "info"}</span>
+          </div>
+          <div class="muted">${item.text || "-"}</div>
+        </div>
+      `).join("");
+    }
+
+    function updateCamera(hasFrame) {
+      const img = el("camera-preview");
+      const empty = el("camera-empty");
+      if (!hasFrame) {
+        img.hidden = true;
+        empty.hidden = false;
+        return;
+      }
+      img.hidden = false;
+      empty.hidden = true;
+      if ((cameraTick % 2) === 0) {
+        img.src = `/api/camera_fast.jpg?ts=${Date.now()}`;
+      }
+      cameraTick += 1;
+    }
+
+    function renderState(state) {
+      const primary = state.primary_interaction || {};
+      text("chip-startup", `${state.startup_state || "booting"} · ${state.startup_message || "-"}`);
+      text("chip-mode", `mode=${state.mode || "-"}`);
+      text("chip-runtime", `camera=${state.has_camera_frame ? "live" : "warming"} · queue=${state.queue_pending ?? 0}`);
+
+      text("focus-name", primary.display_name || "未锁定");
+      text("focus-desc", primary.description || "等待主交互对象建立。识别到主交互人后，其它人事件会降级，直到主目标被释放。");
+      const pill = el("focus-pill");
+      pill.textContent = primary.interaction_state || state.interaction_state || "IDLE";
+      pill.className = `status-pill ${statusClass(state.startup_state === "running" ? "ok" : state.startup_state)}`;
+
+      text("overlay-target", primary.display_name || "未锁定");
+      text("overlay-state", primary.interaction_state || "IDLE");
+      text("overlay-reply", (state.latest_reaction || {}).action || "继续观察");
+
+      text("metric-fps", fmtNum(state.loop_fps || 0));
+      text("metric-latency", `latency ${fmtMs(state.last_latency_ms)}`);
+      text("metric-lock", primary.is_locked ? "已锁定" : "未锁定");
+      text("metric-lock-note", `hold ${fmtMs(primary.owner_lock_age_ms)} · seen ${fmtMs(primary.owner_age_ms)}`);
+      text("metric-faces", String((state.faces || []).length || 0));
+      text("metric-detects", `detections ${state.total_detections || 0}`);
+      text("metric-cpu", fmtPct(state.cpu_percent || 0));
+      text("metric-gpu", `gpu ${fmtPct(state.gpu_percent ?? state.gpu_estimated_percent)}`);
+
+      const reaction = state.latest_reaction || {};
+      text("robot-copy", reaction.robot_response || reaction.react || "等待首个稳定结果...");
+      text("scene-route", reaction.route_summary || "route -");
+
+      const traceLines = [
+        `owner_target_id: ${primary.owner_target_id || "-"}`,
+        `display_name: ${primary.display_name || "-"}`,
+        `interaction_state: ${primary.interaction_state || "-"}`,
+        `lock_age: ${fmtMs(primary.owner_lock_age_ms)}`,
+        `seen_age: ${fmtMs(primary.owner_age_ms)}`,
+        `modalities: ${(primary.modalities || []).join(", ") || "-"}`,
+        `track_detections: ${primary.detection_count ?? "-"}`
+      ];
+      text("governor-trace", traceLines.join("\n"));
+
+      renderFaces(state.faces || []);
+      renderFeed(state);
+      updateCamera(Boolean(state.has_camera_frame));
+    }
+
+    async function refreshState() {
+      try {
+        const res = await fetch("/api/state", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const state = await res.json();
+        renderState(state);
+      } catch (err) {
+        text("chip-startup", `state_error: ${err}`);
+      } finally {
+        setTimeout(refreshState, REFRESH_MS);
+      }
+    }
+
+    async function registerFace() {
+      const name = el("face-name").value.trim();
+      const description = el("face-description").value.trim();
+      if (!selectedImageDataUrl) {
+        text("upload-status", "请先选择一张人脸照片。");
+        return;
+      }
+      if (!name) {
+        text("upload-status", "请先填写人物名称。");
+        return;
+      }
+      text("upload-status", "正在提取 embedding 并写入本地人脸库...");
+      const resp = await fetch("/api/faces", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, image_data_url: selectedImageDataUrl }),
+      });
+      const payload = await resp.json();
+      if (!resp.ok || !payload.ok) {
+        text("upload-status", `注册失败：${payload.error || resp.status}`);
+        return;
+      }
+      text("upload-status", `已注册：${payload.profile.name}`);
+      el("face-name").value = "";
+      el("face-description").value = "";
+      el("face-file").value = "";
+      selectedImageDataUrl = "";
+      el("upload-preview").innerHTML = "选择照片后会在这里预览";
+      renderFaces(payload.faces || []);
+    }
+
+    el("face-file").addEventListener("change", (event) => {
+      const file = event.target.files && event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        selectedImageDataUrl = String(reader.result || "");
+        el("upload-preview").innerHTML = `<img src="${selectedImageDataUrl}" alt="preview" />`;
+      };
+      reader.readAsDataURL(file);
+    });
+    el("register-face-btn").addEventListener("click", registerFace);
+    refreshState();
+  </script>
+</body>
+</html>
