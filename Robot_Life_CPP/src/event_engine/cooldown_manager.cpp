@@ -72,7 +72,7 @@ CooldownCheckResult CooldownManager::check(const CooldownCheckInput& input, doub
 
   const auto cooldown_it = scene_cooldowns_.find(input.scene_type);
   const auto scene_cd = cooldown_it == scene_cooldowns_.end() ? 0.0 : cooldown_it->second;
-  if (scene_cd > 0.0) {
+  if (scene_cd > 0.0 && input.priority != common::EventPriority::P1) {
     const auto key = scene_target_key(input.scene_type, input.target_id);
     const auto last_it = scene_last_at_.find(key);
     if (last_it != scene_last_at_.end()) {

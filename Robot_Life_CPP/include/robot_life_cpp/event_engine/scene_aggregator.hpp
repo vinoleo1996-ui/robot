@@ -34,12 +34,19 @@ class SceneAggregator {
 
  private:
   struct SceneState {
+    std::string scene_type{};
+    std::optional<std::string> target_id{};
+    std::string identity_key{};
     double score{0.0};
     double last_update{0.0};
     std::vector<std::string> event_ids{};
     std::string trace_id{};
+    common::Payload payload{};
   };
 
+  static std::optional<std::string> resolve_target_id(const common::StableEvent& event);
+  static std::string resolve_identity_key(const common::StableEvent& event);
+  static std::string state_key(const std::string& scene_type, const std::string& identity_key);
   std::string classify_scene(const std::string& event_type) const;
   static double event_score_hint(const common::StableEvent& event);
   void gc(double now_mono_s);

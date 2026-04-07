@@ -7,6 +7,7 @@
 
 #include "robot_life_cpp/common/schemas.hpp"
 #include "robot_life_cpp/event_engine/builder.hpp"
+#include "robot_life_cpp/event_engine/entity_tracker.hpp"
 #include "robot_life_cpp/runtime/live_loop.hpp"
 
 namespace robot_life_cpp::runtime {
@@ -37,6 +38,7 @@ class DetectionEventInjector {
 
   EventInjectorConfig config_;
   event_engine::EventBuilder builder_{};
+  event_engine::EntityTracker entity_tracker_{};
   std::unordered_map<std::string, double> last_emit_by_signature_{};
   std::unordered_map<std::string, double> last_emit_by_cooldown_key_{};
 };

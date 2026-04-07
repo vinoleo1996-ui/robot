@@ -130,6 +130,7 @@ add_library(robot_life_modules OBJECT
   src/runtime/telemetry.cpp
   src/runtime/runtime_tuning.cpp
   src/runtime/ui_demo.cpp
+  src/runtime/ui_service.cpp
   src/runtime/ui_slow_scene.cpp
   src/perception/__init__.cpp
   src/perception/base.cpp
@@ -177,5 +178,6 @@ if(ROBOT_LIFE_CPP_BUILD_TESTS)
   enable_testing()
   add_executable(test_core tests/test_core.cpp)
   target_link_libraries(test_core PRIVATE robot_life_core robot_life_modules robot_life_migration)
+  target_compile_options(test_core PRIVATE -UNDEBUG)
   add_test(NAME test_core COMMAND test_core)
 endif()

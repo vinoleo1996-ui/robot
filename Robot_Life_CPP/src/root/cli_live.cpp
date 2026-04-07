@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <thread>
 #include <vector>
 
 #include "robot_life_cpp/bridge/state_snapshot_bridge.hpp"
 #include "robot_life_cpp/common/schemas.hpp"
-#include "robot_life_cpp/common/visual_contract.hpp"
 #include "robot_life_cpp/root/cli_shared.hpp"
 #include "robot_life_cpp/runtime/cuda_probe.hpp"
 #include "robot_life_cpp/runtime/event_injector.hpp"
@@ -19,6 +19,7 @@
 #include "robot_life_cpp/runtime/runtime_tuning.hpp"
 #include "robot_life_cpp/runtime/telemetry.hpp"
 #include "robot_life_cpp/runtime/ui_demo.hpp"
+#include "robot_life_cpp/runtime/ui_service.hpp"
 
 namespace robot_life_cpp::root {
 
@@ -54,6 +55,10 @@ bool parse_bool_arg(std::span<const std::string> args, const std::string& flag, 
   return fallback;
 }
 
+bool has_arg(std::span<const std::string> args, const std::string& flag) {
+  return std::find(args.begin(), args.end(), flag) != args.end();
+}
+
 std::string host_platform_name() {
 #if defined(__APPLE__)
   return "macos";
@@ -79,27 +84,6 @@ common::RawEvent make_event(
   event.cooldown_key = type + ":default";
   event.payload = {{"confidence", std::to_string(confidence)}};
   return event;
-}
-
-common::DetectionResult make_detection(
-    std::string detector,
-    std::string event_type,
-    std::string frame_id,
-    std::string track_id) {
-  common::DetectionResult detection{};
-  detection.trace_id = common::new_id();
-  detection.source = "cli_live";
-  detection.detector = std::move(detector);
-  detection.event_type = std::move(event_type);
-  detection.timestamp = common::now_wall();
-  detection.confidence = 0.9;
-  detection.payload = {
-      {std::string(common::visual_contract::KEY_CAMERA_ID), "front_cam"},
-      {std::string(common::visual_contract::KEY_FRAME_ID), std::move(frame_id)},
-      {std::string(common::visual_contract::KEY_TRACK_ID), std::move(track_id)},
-      {std::string(common::visual_contract::KEY_BBOX), "10,20,100,120"},
-  };
-  return detection;
 }
 
 void print_health(const runtime::RuntimeHealthMonitor& monitor) {
@@ -136,6 +120,8 @@ int run_live(std::span<const std::string> args) {
       parse_string_arg(args, "--ui-html-out", "/tmp/robot_life_cpp_dashboard.html");
   const auto ui_json_out =
       parse_string_arg(args, "--ui-json-out", "/tmp/robot_life_cpp_dashboard.json");
+  const auto ui_host = parse_string_arg(args, "--ui-host", "127.0.0.1");
+  const auto ui_port = std::max(1, parse_int_arg(args, "--ui-port", 8765));
 
   runtime::RuntimeHealthMonitor monitor{};
   monitor.set_phase(runtime::RuntimePhase::Starting, "launcher boot");
@@ -183,6 +169,8 @@ int run_live(std::span<const std::string> args) {
   runtime::AggregatingTelemetrySink telemetry{};
   runtime::RuntimeLoadShedder load_shedder{};
   bridge::StateSnapshotBridge debug_bridge{};
+  std::unique_ptr<runtime::DebugUiService> ui_service{};
+  std::string ui_base_url{};
   std::vector<common::DetectionResult> preview_detections{};
   preview_detections.reserve(4);
   monitor.update_component({"core", true, "ready", "live loop initialized"});
@@ -204,15 +192,6 @@ int run_live(std::span<const std::string> args) {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  if (!backend_ready && backend->backend_id() == "native") {
-    std::vector<common::DetectionResult> bootstrap{};
-    bootstrap.push_back(make_detection("native_face", "face_detected", "native-1", "person_track_native"));
-    bootstrap.push_back(make_detection("native_pose", "pose_detected", "native-2", "person_track_native"));
-    injector.inject_into(&loop, bootstrap, common::now_mono());
-    monitor.update_component({"backend", true, "ready", "native bootstrap detections injected"});
-    backend_ready = true;
-  }
-
   if (!backend_ready) {
     monitor.set_phase(runtime::RuntimePhase::Degraded, "backend not ready within warmup window");
   } else {
@@ -220,7 +199,20 @@ int run_live(std::span<const std::string> args) {
   }
 
   if (ui_enabled) {
-    monitor.update_component({"ui", true, "ready", "debug snapshot bridge active"});
+    runtime::UiServiceConfig ui_config{};
+    ui_config.host = ui_host;
+    ui_config.port = ui_port;
+    ui_config.dashboard_html = ui_html_out;
+    ui_config.dashboard_json = ui_json_out;
+    ui_service = std::make_unique<runtime::DebugUiService>(ui_config);
+    std::string ui_error{};
+    if (ui_service->start(&ui_error)) {
+      ui_base_url = ui_service->base_url();
+      monitor.update_component({"ui", true, "ready", "debug ui api " + ui_base_url});
+    } else {
+      monitor.update_component({"ui", false, "failed", ui_error});
+      ui_service.reset();
+    }
   }
   print_health(monitor);
 
@@ -310,6 +302,10 @@ int run_live(std::span<const std::string> args) {
           cuda.available ? ("cuda devices=" + std::to_string(cuda.device_count)) : cuda.message;
       runtime::write_debug_dashboard_files(dashboard, ui_html_out, ui_json_out);
     }
+
+    const auto tick_hz = std::max(1.0, tuning_store.current()->live_loop.tick_hz);
+    const auto sleep_for = std::chrono::duration<double>(1.0 / tick_hz);
+    std::this_thread::sleep_for(sleep_for);
   }
 
   auto snap = loop.snapshot();
@@ -317,32 +313,58 @@ int run_live(std::span<const std::string> args) {
   monitor.set_phase(runtime::RuntimePhase::Stopping, "launcher shutdown");
   print_health(monitor);
   backend->stop();
+  if (ui_service != nullptr) {
+    ui_service->stop();
+  }
   monitor.update_component({"backend", false, "stopped", "backend stopped"});
   monitor.set_phase(runtime::RuntimePhase::Stopped, "launcher complete");
   print_health(monitor);
   std::cout << "[runtime] pending=" << snap.pending_events
+            << " governed_last_tick=" << snap.governed_events_last_tick
+            << " dropped_last_tick=" << snap.dropped_events_last_tick
             << " stable_last_tick=" << snap.stable_events_last_tick
-            << " scenes_last_tick=" << snap.scene_candidates_last_tick << "\n";
+            << " scenes_last_tick=" << snap.scene_candidates_last_tick
+            << " executions_last_tick=" << snap.executions_last_tick
+            << " active_target=" << snap.active_target_id.value_or("none") << "\n";
   if (snap.last_decision.has_value()) {
     std::cout << "[decision] behavior=" << snap.last_decision->target_behavior
+              << " scene=" << snap.last_decision->scene_type.value_or("unknown")
+              << " target=" << snap.last_decision->target_id.value_or("none")
               << " mode=" << common::to_string(snap.last_decision->mode)
               << " priority=" << common::to_string(snap.last_decision->priority)
               << " reason=" << snap.last_decision->reason << "\n";
   } else {
     std::cout << "[decision] none\n";
   }
+  if (snap.last_execution.has_value()) {
+    std::cout << "[execution] behavior=" << snap.last_execution->behavior_id
+              << " status=" << snap.last_execution->status
+              << " degraded=" << (snap.last_execution->degraded ? "true" : "false")
+              << " interrupted=" << (snap.last_execution->interrupted ? "true" : "false")
+              << "\n";
+  } else {
+    std::cout << "[execution] none\n";
+  }
   if (ui_enabled) {
     std::cout << "[debug_bridge] " << debug_bridge.latest_json() << "\n";
-    std::cout << "[ui] html=" << ui_html_out << " json=" << ui_json_out << "\n";
+    std::cout << "[ui] html=" << ui_html_out << " json=" << ui_json_out;
+    if (!ui_base_url.empty()) {
+      std::cout << " url=" << ui_base_url;
+    }
+    std::cout << "\n";
   }
   return monitor.phase() == runtime::RuntimePhase::Stopped ? 0 : 4;
 }
 
 int ui_demo(std::span<const std::string> args) {
   std::vector<std::string> forwarded{};
-  forwarded.reserve(args.size() + 2);
+  forwarded.reserve(args.size() + 4);
   forwarded.emplace_back("--ui");
   forwarded.emplace_back("true");
+  if (!has_arg(args, "--ticks")) {
+    forwarded.emplace_back("--ticks");
+    forwarded.emplace_back("36000");
+  }
   for (const auto& arg : args) {
     forwarded.push_back(arg);
   }

@@ -47,7 +47,28 @@ def infer_cpp_target(path: str) -> str:
 def is_implemented_target(target: str) -> bool:
     if target.startswith("src/stubs/"):
         return False
-    return (ROOT / target).exists()
+    target_path = ROOT / target
+    if not target_path.exists():
+        return False
+    return not looks_like_placeholder_only(target_path)
+
+
+def looks_like_placeholder_only(path: Path) -> bool:
+    body: list[str] = []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.split("//", 1)[0].strip()
+        if not line:
+            continue
+        if line.startswith("#include"):
+            continue
+        if line.startswith("namespace "):
+            continue
+        if line == "}":
+            continue
+        if raw.strip().startswith("}  // namespace"):
+            continue
+        body.append(line)
+    return len(body) == 1 and "constexpr std::string_view kModule" in body[0]
 
 
 def read_modules() -> list[str]:

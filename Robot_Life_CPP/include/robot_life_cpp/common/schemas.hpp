@@ -83,6 +83,8 @@ struct SceneCandidate {
 struct ArbitrationResult {
   std::string decision_id;
   std::string trace_id;
+  std::optional<std::string> scene_type{};
+  std::optional<std::string> target_id{};
   std::string target_behavior;
   EventPriority priority{EventPriority::P2};
   DecisionMode mode{DecisionMode::Execute};

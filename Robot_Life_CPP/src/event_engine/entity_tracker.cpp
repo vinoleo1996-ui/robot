@@ -4,6 +4,7 @@
 #include <array>
 #include <cctype>
 #include <iomanip>
+#include <optional>
 #include <sstream>
 
 namespace robot_life_cpp::event_engine {
@@ -26,8 +27,16 @@ std::vector<std::pair<std::string, common::DetectionResult>> EntityTracker::asso
     const auto original_target_it = payload.find("target_id");
     const auto original_target = original_target_it == payload.end() ? "" : original_target_it->second;
     const auto identity_hint = looks_like_ephemeral_target(original_target) ? "" : original_target;
+    const auto external_track_key = make_external_track_key(modality, updated_detection, payload);
+    const auto allow_recent_fallback =
+        !is_person_like_modality(modality) || !identity_hint.empty() || external_track_key.has_value();
 
-    EntityTrack* track = resolve_track(modality, identity_hint, now_mono_s);
+    EntityTrack* track = resolve_track(
+        modality,
+        identity_hint,
+        external_track_key,
+        allow_recent_fallback,
+        now_mono_s);
     if (track == nullptr) {
       const auto kind = modality == "motion" ? "object" : (modality == "audio" ? "global" : "person");
       track = &create_track(kind, identity_hint, now_mono_s);
@@ -39,6 +48,10 @@ std::vector<std::pair<std::string, common::DetectionResult>> EntityTracker::asso
     track->last_event_type = updated_detection.event_type;
     if (!identity_hint.empty()) {
       track->identity_hint = identity_hint;
+    }
+    if (external_track_key.has_value()) {
+      track->external_track_key = *external_track_key;
+      external_track_to_internal_[*external_track_key] = track->track_id;
     }
 
     if (!original_target.empty()) {
@@ -137,13 +150,58 @@ std::string EntityTracker::infer_modality(
   return pipeline.empty() ? "unknown" : pipeline;
 }
 
+bool EntityTracker::is_person_like_modality(const std::string& modality) {
+  return modality == "face" || modality == "gaze" || modality == "gesture";
+}
+
+bool EntityTracker::is_object_like_modality(const std::string& modality) {
+  return modality == "motion";
+}
+
+std::optional<std::string> EntityTracker::make_external_track_key(
+    const std::string& modality,
+    const common::DetectionResult& detection,
+    const common::Payload& payload) {
+  auto detector = detection.detector.empty() ? std::string{"unknown_detector"} : detection.detector;
+  std::transform(detector.begin(), detector.end(), detector.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+  std::string token{};
+  if (const auto track_it = payload.find("track_id"); track_it != payload.end() && !track_it->second.empty()) {
+    token = track_it->second;
+  } else if (const auto target_it = payload.find("target_id"); target_it != payload.end() && !target_it->second.empty()) {
+    token = target_it->second;
+  }
+  if (token.empty()) {
+    return std::nullopt;
+  }
+  return modality + "|" + detector + "|" + token;
+}
+
 EntityTrack* EntityTracker::resolve_track(
     const std::string& modality,
     const std::string& identity_hint,
+    const std::optional<std::string>& external_track_key,
+    bool allow_recent_fallback,
     double now_mono_s) {
-  const bool person_like = (modality == "face" || modality == "gaze" || modality == "gesture");
-  const bool object_like = modality == "motion";
+  const bool person_like = is_person_like_modality(modality);
+  const bool object_like = is_object_like_modality(modality);
   const auto ttl_s = person_like ? person_ttl_s_ : (object_like ? object_ttl_s_ : 0.5);
+
+  if (external_track_key.has_value()) {
+    if (const auto mapping_it = external_track_to_internal_.find(*external_track_key);
+        mapping_it != external_track_to_internal_.end()) {
+      if (const auto track_it = tracks_.find(mapping_it->second); track_it != tracks_.end()) {
+        auto& mapped = track_it->second;
+        if ((now_mono_s - mapped.last_seen_at) <= ttl_s &&
+            ((person_like && mapped.track_kind == "person") ||
+             (object_like && mapped.track_kind == "object") ||
+             (!person_like && !object_like && mapped.track_kind == "global"))) {
+          return &mapped;
+        }
+      }
+    }
+  }
 
   EntityTrack* best = nullptr;
   for (auto& [_, track] : tracks_) {
@@ -165,6 +223,12 @@ EntityTrack* EntityTracker::resolve_track(
     if (best == nullptr || track.last_seen_at > best->last_seen_at) {
       best = &track;
     }
+  }
+  if (external_track_key.has_value()) {
+    return nullptr;
+  }
+  if (!allow_recent_fallback) {
+    return nullptr;
   }
   return best;
 }
@@ -211,6 +275,13 @@ void EntityTracker::prune(double now_mono_s) {
   }
   for (const auto& track_id : stale) {
     tracks_.erase(track_id);
+  }
+  for (auto it = external_track_to_internal_.begin(); it != external_track_to_internal_.end();) {
+    if (tracks_.find(it->second) == tracks_.end()) {
+      it = external_track_to_internal_.erase(it);
+    } else {
+      ++it;
+    }
   }
 }
 

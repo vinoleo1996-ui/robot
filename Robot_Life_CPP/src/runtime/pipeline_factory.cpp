@@ -1,5 +1,9 @@
 #include "robot_life_cpp/runtime/pipeline_factory.hpp"
 
+#include <memory>
+
+#include "robot_life_cpp/perception/deepstream_process_backend.hpp"
+
 namespace robot_life_cpp::runtime {
 
 PipelineFactory::PipelineFactory() : registry_(perception::make_default_backend_registry()) {}
@@ -22,6 +26,12 @@ std::string PipelineFactory::backend_name_for_profile(const std::string& profile
 std::unique_ptr<perception::Backend> PipelineFactory::create_for_profile(
     const std::string& profile_name,
     std::string* error) const {
+  if (profile_name == "deepstream_prod") {
+    return std::make_unique<perception::DeepStreamProcessBackend>("real", true);
+  }
+  if (profile_name == "linux_deepstream_4vision") {
+    return std::make_unique<perception::DeepStreamProcessBackend>("auto", false);
+  }
   const auto backend_name = backend_name_for_profile(profile_name);
   if (backend_name.empty()) {
     if (error != nullptr) {

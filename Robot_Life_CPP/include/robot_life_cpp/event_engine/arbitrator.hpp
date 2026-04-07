@@ -37,6 +37,8 @@ class Arbitrator {
       const std::vector<common::SceneCandidate>& scenes,
       double now_mono_s = common::now_mono());
 
+  common::EventPriority resolve_scene_priority(const std::string& scene_type) const;
+
   void reset();
 
  private:

@@ -1,9 +1,19 @@
+#include <atomic>
 #include <algorithm>
+#include <array>
+#include <arpa/inet.h>
+#include <cstdint>
+#include <csignal>
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <netinet/in.h>
+#include <sstream>
+#include <string>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <thread>
 #include <unordered_set>
 
@@ -36,8 +46,11 @@
 #include "robot_life_cpp/runtime/pipeline_factory.hpp"
 #include "robot_life_cpp/runtime/profile_registry.hpp"
 #include "robot_life_cpp/runtime/runtime_tuning.hpp"
+#include "robot_life_cpp/runtime/scene_coordinator.hpp"
 #include "robot_life_cpp/runtime/telemetry.hpp"
+#include "robot_life_cpp/runtime/target_governor.hpp"
 #include "robot_life_cpp/runtime/ui_demo.hpp"
+#include "robot_life_cpp/runtime/ui_service.hpp"
 
 namespace {
 robot_life_cpp::common::RawEvent build_event(const std::string& event_type,
@@ -132,6 +145,93 @@ robot_life_cpp::perception::DeepStreamFrameMetadata build_frame_metadata(
   return frame;
 }
 
+struct HttpResponse {
+  int status{0};
+  std::string body;
+};
+
+bool write_text_file(const std::filesystem::path& path, const std::string& content) {
+  std::ofstream out(path, std::ios::binary | std::ios::trunc);
+  if (!out.good()) {
+    return false;
+  }
+  out << content;
+  return out.good();
+}
+
+std::filesystem::path temp_file_path(const std::string& stem, const std::string& ext) {
+  return std::filesystem::temp_directory_path() / (stem + "_" + robot_life_cpp::common::new_id() + ext);
+}
+
+HttpResponse perform_http_request(int port, const std::string& raw_request) {
+  const int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) {
+    return {};
+  }
+
+  sockaddr_in addr{};
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons(static_cast<uint16_t>(port));
+  addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+  int connect_rc = -1;
+  for (int i = 0; i < 50; ++i) {
+    connect_rc = ::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    if (connect_rc == 0) {
+      break;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+  if (connect_rc != 0) {
+    ::close(fd);
+    return {};
+  }
+
+  std::size_t written = 0;
+  while (written < raw_request.size()) {
+    const auto n = ::send(fd, raw_request.data() + written, raw_request.size() - written, 0);
+    if (n <= 0) {
+      ::close(fd);
+      return {};
+    }
+    written += static_cast<std::size_t>(n);
+  }
+  ::shutdown(fd, SHUT_WR);
+
+  std::string response;
+  std::array<char, 4096> buffer{};
+  while (true) {
+    const auto n = ::recv(fd, buffer.data(), buffer.size(), 0);
+    if (n <= 0) {
+      break;
+    }
+    response.append(buffer.data(), static_cast<std::size_t>(n));
+  }
+
+  HttpResponse out{};
+  const auto header_end = response.find("\r\n\r\n");
+  if (header_end == std::string::npos) {
+    ::close(fd);
+    return out;
+  }
+  const auto headers = response.substr(0, header_end);
+  out.body = response.substr(header_end + 4);
+  const auto line_end = headers.find("\r\n");
+  const auto status_line = headers.substr(0, line_end);
+  const auto first_space = status_line.find(' ');
+  const auto second_space = first_space == std::string::npos ? std::string::npos : status_line.find(' ', first_space + 1);
+  if (first_space == std::string::npos || second_space == std::string::npos) {
+    ::close(fd);
+    return out;
+  }
+  try {
+    out.status = std::stoi(status_line.substr(first_space + 1, second_space - first_space - 1));
+  } catch (...) {
+    out.status = 0;
+  }
+  ::close(fd);
+  return out;
+}
+
 std::vector<robot_life_cpp::common::DetectionResult> export_and_adapt(
     const std::vector<robot_life_cpp::perception::DeepStreamFrameMetadata>& frames) {
   robot_life_cpp::perception::DeepStreamExporter exporter{};
@@ -219,7 +319,32 @@ void test_live_loop_smoke() {
   assert(ok);
   const auto snap = loop.snapshot();
   assert(snap.stable_events_last_tick >= 1);
-  assert(snap.scene_candidates_last_tick >= 1);
+  assert(snap.scene_candidates_last_tick == 1);
+}
+
+void test_live_loop_uses_single_scene_source_for_fast_reaction_paths() {
+  robot_life_cpp::runtime::LiveLoop loop{};
+  const auto base = robot_life_cpp::common::now_mono();
+
+  auto familiar = build_event("familiar_face_detected", "face:familiar", 0.96, base);
+  familiar.payload["target_id"] = "person_track_001";
+  auto gesture = build_event("gesture_detected", "gesture:familiar", 0.92, base + 0.03);
+  gesture.payload["target_id"] = "person_track_001";
+
+  loop.ingest(std::move(familiar));
+  loop.ingest(std::move(gesture));
+  const bool ok = loop.tick();
+  assert(ok);
+
+  const auto snap = loop.snapshot();
+  assert(snap.scene_candidates_last_tick == 2);
+  assert(snap.last_decision.has_value());
+  assert(snap.last_decision->scene_type.has_value());
+  assert(snap.last_decision->scene_type.value() == "greeting_familiar_scene");
+  assert(snap.last_decision->target_behavior == "perform_greeting");
+  assert(snap.last_execution.has_value());
+  assert(snap.last_execution->behavior_id == "perform_greeting");
+  assert(snap.executions_last_tick == 1);
 }
 
 void test_hysteresis_hold_and_release() {
@@ -411,6 +536,193 @@ void test_entity_tracker_reuses_identity_tracks() {
   auto third = tracker.associate_batch(third_batch, 30.3);
   assert(third.size() == 1);
   assert(third[0].second.payload.at("track_kind") == "object");
+}
+
+void test_entity_tracker_distinguishes_external_track_ids() {
+  robot_life_cpp::event_engine::EntityTracker tracker{};
+
+  std::vector<std::pair<std::string, robot_life_cpp::common::DetectionResult>> first_batch{};
+  first_batch.emplace_back(
+      "face",
+      build_detection("insightface", "face_detected", {{"track_id", "det_track_1"}}));
+  first_batch.emplace_back(
+      "face",
+      build_detection("insightface", "face_detected", {{"track_id", "det_track_2"}}));
+
+  const auto first = tracker.associate_batch(first_batch, 40.0);
+  assert(first.size() == 2);
+  const auto first_id_a = first[0].second.payload.at("track_id");
+  const auto first_id_b = first[1].second.payload.at("track_id");
+  assert(first_id_a != first_id_b);
+
+  std::vector<std::pair<std::string, robot_life_cpp::common::DetectionResult>> second_batch{};
+  second_batch.emplace_back(
+      "face",
+      build_detection("insightface", "face_detected", {{"track_id", "det_track_1"}}));
+  second_batch.emplace_back(
+      "face",
+      build_detection("insightface", "face_detected", {{"track_id", "det_track_2"}}));
+
+  const auto second = tracker.associate_batch(second_batch, 40.1);
+  assert(second.size() == 2);
+  assert(second[0].second.payload.at("track_id") == first_id_a);
+  assert(second[1].second.payload.at("track_id") == first_id_b);
+}
+
+void test_target_governor_enforces_face_cooldown_and_target_lock() {
+  robot_life_cpp::runtime::TargetGovernor governor{};
+
+  auto familiar = build_event("familiar_face_detected", "familiar_face_detected:alice", 0.95, 10.0);
+  familiar.payload["target_id"] = "person_track_001";
+  familiar.payload["identity_hint"] = "alice";
+  auto first = governor.preprocess(familiar, 10.0);
+  assert(first.has_value());
+  auto second = governor.preprocess(familiar, 10.2);
+  assert(!second.has_value());
+
+  robot_life_cpp::common::ArbitrationResult decision{};
+  decision.decision_id = robot_life_cpp::common::new_id();
+  decision.trace_id = robot_life_cpp::common::new_id();
+  decision.scene_type = "greeting_familiar_scene";
+  decision.target_id = "person_track_001";
+  decision.target_behavior = "perform_greeting";
+  decision.priority = robot_life_cpp::common::EventPriority::P1;
+  governor.record_decision(decision, 11.0);
+
+  auto cross_target = build_event("motion_detected", "motion_detected:other", 0.9, 11.2);
+  cross_target.payload["target_id"] = "person_track_999";
+  auto blocked = governor.preprocess(cross_target, 11.2);
+  assert(!blocked.has_value());
+}
+
+void test_target_governor_limits_special_audio_to_explicit_whitelist() {
+  robot_life_cpp::runtime::TargetGovernor governor{};
+
+  auto generic_audio = build_event("audio_detected", "audio:generic", 0.94, 20.0);
+  generic_audio.priority = robot_life_cpp::common::EventPriority::P2;
+  auto ordinary = governor.preprocess(generic_audio, 20.0);
+  assert(ordinary.has_value());
+  assert(ordinary->priority == robot_life_cpp::common::EventPriority::P2);
+
+  auto loud_sound = build_event("loud_sound_detected", "audio:loud", 0.97, 20.1);
+  loud_sound.priority = robot_life_cpp::common::EventPriority::P2;
+  auto special = governor.preprocess(loud_sound, 20.1);
+  assert(special.has_value());
+  assert(special->priority == robot_life_cpp::common::EventPriority::P0);
+}
+
+void test_live_loop_scene_candidates_use_single_scene_source() {
+  robot_life_cpp::runtime::LiveLoop loop{};
+  const auto base = robot_life_cpp::common::now_mono();
+  auto e1 = build_event("speech_activity", "speech:test", 0.9, base);
+  auto e2 = build_event("speech_activity", "speech:test", 0.91, base + 0.03);
+  loop.ingest(std::move(e1));
+  loop.ingest(std::move(e2));
+  const bool ok = loop.tick();
+  assert(ok);
+  const auto snap = loop.snapshot();
+  assert(snap.stable_events_last_tick >= 1);
+  assert(snap.scene_candidates_last_tick == 1);
+  assert(snap.last_decision.has_value());
+  assert(snap.last_decision->scene_type.has_value());
+  assert(snap.last_decision->scene_type.value() == "speech_activity");
+  assert(snap.last_execution.has_value());
+  assert(snap.last_execution->behavior_id == "voice_response");
+}
+
+void test_live_loop_snapshot_is_safe_during_tick() {
+  robot_life_cpp::runtime::LiveLoop loop{};
+  std::atomic<bool> keep_running{true};
+  std::thread reader([&]() {
+    while (keep_running.load()) {
+      (void)loop.snapshot();
+      (void)loop.last_decision();
+      std::this_thread::yield();
+    }
+  });
+
+  const auto base = robot_life_cpp::common::now_mono();
+  for (int i = 0; i < 32; ++i) {
+    loop.ingest(build_event("gesture_wave", "gesture:stress", 0.9, base + (0.01 * static_cast<double>(i))));
+    const bool ok = loop.tick();
+    assert(ok);
+  }
+
+  keep_running.store(false);
+  reader.join();
+  const auto snap = loop.snapshot();
+  assert(snap.running);
+}
+
+void test_scene_coordinator_derives_fast_reaction_scenes() {
+  robot_life_cpp::runtime::SceneCoordinator coordinator{};
+  std::vector<robot_life_cpp::common::StableEvent> stable_events{};
+  auto familiar = build_stable_event("familiar_face_detected", "person_track_001", 20.0);
+  familiar.payload["confidence"] = "0.90";
+  stable_events.push_back(std::move(familiar));
+  auto gesture = build_stable_event("gesture_detected", "person_track_001", 20.0);
+  gesture.payload["confidence"] = "0.85";
+  stable_events.push_back(std::move(gesture));
+
+  const auto scenes = coordinator.derive(stable_events, 12.0);
+  assert(!scenes.empty());
+  bool found_greeting = false;
+  bool found_gesture = false;
+  for (const auto& scene : scenes) {
+    if (scene.scene_type == "greeting_familiar_scene") {
+      found_greeting = true;
+    }
+    if (scene.scene_type == "gesture_pose_response_scene") {
+      found_gesture = true;
+    }
+  }
+  assert(found_greeting);
+  assert(found_gesture);
+}
+
+void test_scene_coordinator_refines_face_identity_payloads() {
+  robot_life_cpp::runtime::SceneCoordinator coordinator{};
+  std::vector<robot_life_cpp::common::StableEvent> stable_events{};
+
+  auto familiar = build_stable_event("face_identity_detected", "person_track_001", 30.0);
+  familiar.payload["confidence"] = "0.95";
+  familiar.payload["identity_state"] = "familiar";
+  stable_events.push_back(std::move(familiar));
+
+  auto stranger = build_stable_event("face_identity_detected", "person_track_002", 30.0);
+  stranger.payload["confidence"] = "0.88";
+  stranger.payload["identity_state"] = "stranger";
+  stable_events.push_back(std::move(stranger));
+
+  const auto scenes = coordinator.derive(stable_events, 12.0);
+  assert(scenes.size() == 2);
+
+  bool found_familiar = false;
+  bool found_stranger = false;
+  for (const auto& scene : scenes) {
+    assert(scene.payload.at("scene_origin") == "coordinator_hint");
+    assert(scene.payload.at("scene_role") == "metadata");
+    if (scene.scene_type == "greeting_familiar_scene") {
+      found_familiar = true;
+    }
+    if (scene.scene_type == "greeting_stranger_scene") {
+      found_stranger = true;
+    }
+  }
+  assert(found_familiar);
+  assert(found_stranger);
+}
+
+void test_scene_coordinator_does_not_escalate_generic_audio() {
+  robot_life_cpp::runtime::SceneCoordinator coordinator{};
+  std::vector<robot_life_cpp::common::StableEvent> stable_events{};
+
+  auto audio = build_stable_event("audio_detected", "person_track_001", 30.0);
+  audio.payload["confidence"] = "0.93";
+  stable_events.push_back(std::move(audio));
+
+  const auto scenes = coordinator.derive(stable_events, 12.0);
+  assert(scenes.empty());
 }
 
 void test_resource_manager_preemption_and_release() {
@@ -700,6 +1012,18 @@ void test_pipeline_factory_selects_backend_by_profile() {
   auto alias_deepstream = factory.create_for_profile("deepstream_prod", &error);
   assert(alias_deepstream != nullptr);
   assert(alias_deepstream->backend_id() == "deepstream");
+  const bool prod_started = alias_deepstream->start();
+  if (prod_started) {
+    auto* prod_backend =
+        dynamic_cast<robot_life_cpp::perception::DeepStreamProcessBackend*>(alias_deepstream.get());
+    assert(prod_backend != nullptr);
+    assert(prod_backend->launch_spec().resolved_mode == "real");
+    alias_deepstream->stop();
+  } else {
+    const auto health = alias_deepstream->health();
+    assert(health.state == "failed");
+    assert(health.detail.find("real DeepStream runtime required") != std::string::npos);
+  }
 
   auto alias_native = factory.create_for_profile("cpu_debug", &error);
   assert(alias_native != nullptr);
@@ -726,6 +1050,9 @@ void test_runtime_tuning_profile_loads_single_source_values() {
     out << "profiles.mac_debug_native.arbitrator.behavior_by_scene.motion_alert: track_motion\n";
     out << "profiles.mac_debug_native.taxonomy.default_scene: custom_default_scene\n";
     out << "profiles.mac_debug_native.taxonomy.proactive_scenes: custom_attention_scene,custom_greeting_scene\n";
+    out << "profiles.mac_debug_native.taxonomy.event_scene_exact.familiar_face_detected: custom_familiar_scene\n";
+    out << "profiles.mac_debug_native.taxonomy.event_scene_exact.face_attention_detected: custom_face_attention_scene\n";
+    out << "profiles.mac_debug_native.taxonomy.event_scene_exact.motion_detected: custom_motion_scene\n";
     out << "profiles.mac_debug_native.taxonomy.event_scene_exact.wave_detected: custom_wave_scene\n";
     out << "profiles.mac_debug_native.taxonomy.event_scene_token.face: custom_presence_scene\n";
     out << "profiles.mac_debug_native.deepstream.face.sample_interval_frames: 4\n";
@@ -746,6 +1073,9 @@ void test_runtime_tuning_profile_loads_single_source_values() {
   assert(tuning.arbitrator.behavior_by_scene.at("motion_alert") == "track_motion");
   assert(tuning.taxonomy.default_scene == "custom_default_scene");
   assert(tuning.taxonomy.proactive_scenes.contains("custom_attention_scene"));
+  assert(tuning.taxonomy.event_scene_exact.at("familiar_face_detected") == "custom_familiar_scene");
+  assert(tuning.taxonomy.event_scene_exact.at("face_attention_detected") == "custom_face_attention_scene");
+  assert(tuning.taxonomy.event_scene_exact.at("motion_detected") == "custom_motion_scene");
   assert(tuning.taxonomy.event_scene_exact.at("wave_detected") == "custom_wave_scene");
   assert(tuning.taxonomy.event_scene_token.at("face") == "custom_presence_scene");
   assert(tuning.aggregator.taxonomy.default_scene == "custom_default_scene");
@@ -823,6 +1153,43 @@ void test_scene_aggregator_uses_configured_taxonomy_mapping() {
   assert(scenes.front().scene_type == "custom_scene");
 }
 
+void test_scene_aggregator_preserves_target_bound_identity_buckets() {
+  robot_life_cpp::event_engine::SceneAggregatorRules rules{};
+  rules.taxonomy.event_scene_exact["wave_detected"] = "gesture_pose_response_scene";
+  robot_life_cpp::event_engine::SceneAggregator aggregator{rules};
+
+  std::vector<robot_life_cpp::common::StableEvent> stable_events{};
+  auto alice_wave = build_stable_event("wave_detected", "person_track_001", 40.0);
+  alice_wave.payload["track_id"] = "person_track_001";
+  alice_wave.payload["face_id"] = "alice_face";
+  alice_wave.payload["confidence"] = "0.91";
+  stable_events.push_back(alice_wave);
+
+  auto bob_wave = build_stable_event("wave_detected", "person_track_002", 40.0);
+  bob_wave.payload["track_id"] = "person_track_002";
+  bob_wave.payload["face_id"] = "bob_face";
+  bob_wave.payload["confidence"] = "0.88";
+  stable_events.push_back(bob_wave);
+
+  const auto scenes = aggregator.update(stable_events, 10.0);
+  assert(scenes.size() == 2);
+
+  std::unordered_set<std::string> target_ids{};
+  std::unordered_set<std::string> binding_keys{};
+  for (const auto& scene : scenes) {
+    assert(scene.scene_type == "gesture_pose_response_scene");
+    assert(scene.target_id.has_value());
+    target_ids.insert(*scene.target_id);
+    const auto binding_it = scene.payload.find("identity_binding_key");
+    assert(binding_it != scene.payload.end());
+    binding_keys.insert(binding_it->second);
+  }
+  assert(target_ids.contains("person_track_001"));
+  assert(target_ids.contains("person_track_002"));
+  assert(binding_keys.contains("alice_face"));
+  assert(binding_keys.contains("bob_face"));
+}
+
 void test_load_shedder_reduces_preview_and_batch_under_pressure() {
   robot_life_cpp::runtime::RuntimeLoadShedder shedder{};
   robot_life_cpp::runtime::LoadShedderInput input{};
@@ -884,6 +1251,68 @@ void test_debug_dashboard_renderers_include_runtime_and_load_information() {
   assert(html.find("elevated_load") != std::string::npos);
 }
 
+void test_debug_ui_service_recognition_handles_escaped_target_id() {
+  const auto html_path = temp_file_path("robot_ui_dashboard", ".html");
+  const auto json_path = temp_file_path("robot_ui_state", ".json");
+  const auto faces_path = temp_file_path("robot_ui_faces", ".tsv");
+  const auto bindings_path = temp_file_path("robot_ui_bindings", ".tsv");
+
+  assert(write_text_file(html_path, "<!doctype html><html><body>ok</body></html>"));
+  assert(write_text_file(json_path, R"({"active_target_id":"target\"007"})"));
+  assert(write_text_file(faces_path, "face_1\tAlice\tdata\t1\n"));
+  assert(write_text_file(bindings_path, "target\"007\tface_1\n"));
+
+  robot_life_cpp::runtime::UiServiceConfig config{};
+  config.port = 18765;
+  config.dashboard_html = html_path;
+  config.dashboard_json = json_path;
+  config.faces_db = faces_path;
+  config.bindings_db = bindings_path;
+
+  robot_life_cpp::runtime::DebugUiService service{config};
+  assert(service.start());
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  const auto response = perform_http_request(
+      config.port,
+      "GET /api/recognition HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n");
+  service.stop();
+
+  assert(response.status == 200);
+  assert(response.body.find("\"recognized\":true") != std::string::npos);
+  assert(response.body.find("\"person_name\":\"Alice\"") != std::string::npos);
+
+  std::filesystem::remove(html_path);
+  std::filesystem::remove(json_path);
+  std::filesystem::remove(faces_path);
+  std::filesystem::remove(bindings_path);
+}
+
+void test_debug_ui_service_rejects_oversize_post_body() {
+  robot_life_cpp::runtime::UiServiceConfig config{};
+  config.port = 18766;
+  config.max_request_body_bytes = 32;
+  config.max_image_data_bytes = 32;
+
+  robot_life_cpp::runtime::DebugUiService service{config};
+  assert(service.start());
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  const std::string body(64, 'a');
+  std::ostringstream request;
+  request << "POST /api/faces HTTP/1.1\r\n"
+          << "Host: 127.0.0.1\r\n"
+          << "Content-Type: application/x-www-form-urlencoded\r\n"
+          << "Content-Length: " << body.size() << "\r\n\r\n"
+          << body;
+  const auto response = perform_http_request(config.port, request.str());
+  service.stop();
+
+  assert(response.status == 413);
+  assert(response.body.find("request body exceeds limit") != std::string::npos ||
+         response.body.find("image_data exceeds limit") != std::string::npos);
+}
+
 void test_deepstream_protocol_roundtrip() {
   robot_life_cpp::common::DetectionResult detection{};
   detection.trace_id = "trace-1";
@@ -909,6 +1338,8 @@ void test_deepstream_protocol_roundtrip() {
 }
 
 void test_deepstream_process_backend_streams_mock_detections() {
+  const auto project_root = std::filesystem::path{__FILE__}.parent_path().parent_path();
+  ScopedCurrentPath cwd{project_root};
   robot_life_cpp::runtime::PipelineFactory factory{};
   std::string error{};
   auto deepstream = factory.create_for_profile("linux_deepstream_4vision", &error);
@@ -1527,7 +1958,9 @@ void test_deepstream_event_flow_face_end_to_end() {
   assert(events.size() == 2);
   assert(events.front().event_type == "face_identity_detected");
   assert(decision.has_value());
-  assert(decision->target_behavior == "engage_presence");
+  assert(decision->scene_type.has_value());
+  assert(decision->scene_type.value() == "greeting_familiar_scene");
+  assert(decision->target_behavior == "perform_greeting");
 }
 
 void test_deepstream_event_flow_pose_gesture_end_to_end() {
@@ -1584,7 +2017,9 @@ void test_deepstream_event_flow_motion_end_to_end() {
   assert(events.size() == 2);
   assert(events.front().event_type == "approaching_detected");
   assert(decision.has_value());
-  assert(decision->target_behavior == "motion_observe");
+  assert(decision->scene_type.has_value());
+  assert(decision->scene_type.value() == "moving_object_attention_scene");
+  assert(decision->target_behavior == "perform_tracking");
 }
 
 void test_deepstream_event_flow_scene_object_end_to_end() {
@@ -1612,7 +2047,9 @@ void test_deepstream_event_flow_scene_object_end_to_end() {
   assert(events.size() == 2);
   assert(events.front().event_type == "object_detected");
   assert(decision.has_value());
-  assert(decision->target_behavior == "idle_scan");
+  assert(decision->scene_type.has_value());
+  assert(decision->scene_type.value() == "moving_object_attention_scene");
+  assert(decision->target_behavior == "perform_tracking");
 }
 
 void test_deepstream_execution_plan_reports_missing_model_configs() {
@@ -1744,6 +2181,7 @@ void test_runtime_health_monitor_tracks_phase_and_components() {
 }  // namespace
 
 int main() {
+  std::signal(SIGPIPE, SIG_IGN);
   test_live_loop_smoke();
   test_hysteresis_hold_and_release();
   test_module_catalog_uniqueness();
@@ -1753,6 +2191,14 @@ int main() {
   test_arbitration_runtime_queue_and_dequeue();
   test_temporal_event_layer_derives_gaze_and_wave();
   test_entity_tracker_reuses_identity_tracks();
+  test_entity_tracker_distinguishes_external_track_ids();
+  test_target_governor_enforces_face_cooldown_and_target_lock();
+  test_target_governor_limits_special_audio_to_explicit_whitelist();
+  test_live_loop_scene_candidates_use_single_scene_source();
+  test_live_loop_snapshot_is_safe_during_tick();
+  test_scene_coordinator_derives_fast_reaction_scenes();
+  test_scene_coordinator_refines_face_identity_payloads();
+  test_scene_coordinator_does_not_escalate_generic_audio();
   test_resource_manager_preemption_and_release();
   test_behavior_safety_guard_blocks_conflict_without_interrupt();
   test_behavior_executor_degrade_and_resume_queue();
@@ -1768,9 +2214,12 @@ int main() {
   test_runtime_tuning_store_reloads_after_file_change();
   test_runtime_tuning_applies_to_graph_config();
   test_scene_aggregator_uses_configured_taxonomy_mapping();
+  test_scene_aggregator_preserves_target_bound_identity_buckets();
   test_load_shedder_reduces_preview_and_batch_under_pressure();
   test_load_shedder_preserves_configured_batch_cap_when_normal();
   test_debug_dashboard_renderers_include_runtime_and_load_information();
+  test_debug_ui_service_recognition_handles_escaped_target_id();
+  test_debug_ui_service_rejects_oversize_post_body();
   test_deepstream_protocol_roundtrip();
   test_deepstream_process_backend_streams_mock_detections();
   test_deepstream_launch_spec_prefers_mock_on_non_linux_real_request();

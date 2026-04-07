@@ -22,10 +22,13 @@ struct DeepStreamLaunchSpec {
 };
 
 DeepStreamLaunchSpec resolve_deepstream_launch_spec();
+DeepStreamLaunchSpec resolve_deepstream_launch_spec(std::string requested_mode_override);
 
 class DeepStreamProcessBackend final : public Backend {
  public:
-  DeepStreamProcessBackend();
+  explicit DeepStreamProcessBackend(
+      std::string requested_mode_override = {},
+      bool require_real_runtime = false);
   ~DeepStreamProcessBackend() override;
 
   std::string backend_id() const override;
@@ -40,6 +43,8 @@ class DeepStreamProcessBackend final : public Backend {
   bool spawn_process();
   void refresh_pipe();
 
+  std::string requested_mode_override_{};
+  bool require_real_runtime_{false};
   FILE* pipe_{nullptr};
   std::deque<common::DetectionResult> queue_{};
   bool manual_stop_{true};

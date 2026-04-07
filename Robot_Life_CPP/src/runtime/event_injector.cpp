@@ -7,6 +7,18 @@
 
 namespace robot_life_cpp::runtime {
 
+namespace {
+std::string pipeline_name_for_detection(const common::DetectionResult& detection) {
+  if (!detection.detector.empty()) {
+    return detection.detector;
+  }
+  if (!detection.source.empty()) {
+    return detection.source;
+  }
+  return "unknown";
+}
+}  // namespace
+
 DetectionEventInjector::DetectionEventInjector(EventInjectorConfig config)
     : config_(std::move(config)) {
   if (config_.max_events_per_batch == 0) {
@@ -26,10 +38,17 @@ void DetectionEventInjector::reconfigure(EventInjectorConfig config) {
 std::vector<common::RawEvent> DetectionEventInjector::build_events(
     const std::vector<common::DetectionResult>& detections,
     double now_mono) {
-  std::vector<common::RawEvent> events{};
-  events.reserve(std::min(detections.size(), config_.max_events_per_batch));
-
+  std::vector<std::pair<std::string, common::DetectionResult>> tracking_input{};
+  tracking_input.reserve(detections.size());
   for (const auto& detection : detections) {
+    tracking_input.emplace_back(pipeline_name_for_detection(detection), detection);
+  }
+  const auto tracked_detections = entity_tracker_.associate_batch(tracking_input, now_mono);
+
+  std::vector<common::RawEvent> events{};
+  events.reserve(std::min(tracked_detections.size(), config_.max_events_per_batch));
+
+  for (const auto& [_, detection] : tracked_detections) {
     if (events.size() >= config_.max_events_per_batch) {
       break;
     }
@@ -80,11 +99,12 @@ bool DetectionEventInjector::should_emit(const common::RawEvent& event, double n
 }
 
 std::string DetectionEventInjector::dedupe_signature(const common::RawEvent& event) {
+  const auto target_it = event.payload.find("target_id");
   const auto track_it = event.payload.find("track_id");
-  const auto frame_it = event.payload.find("frame_id");
+  const auto target_id = target_it == event.payload.end() ? "" : target_it->second;
   const auto track_id = track_it == event.payload.end() ? "unknown_track" : track_it->second;
-  const auto frame_id = frame_it == event.payload.end() ? "unknown_frame" : frame_it->second;
-  return event.event_type + "|" + event.source + "|" + track_id + "|" + frame_id;
+  const auto dedupe_id = target_id.empty() ? track_id : target_id;
+  return event.event_type + "|" + event.source + "|" + dedupe_id;
 }
 
 }  // namespace robot_life_cpp::runtime

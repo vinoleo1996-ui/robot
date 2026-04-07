@@ -7,6 +7,9 @@
 namespace robot_life_cpp::behavior {
 
 ResourceManager::ResourceManager() {
+  resource_defs_.emplace("camera", ResourceDef{"camera", ResourceMode::Shared, 2});
+  resource_defs_.emplace("audio", ResourceDef{"audio", ResourceMode::Exclusive, 2});
+  resource_defs_.emplace("gpu", ResourceDef{"gpu", ResourceMode::Shared, 2});
   resource_defs_.emplace("AudioOut", ResourceDef{"AudioOut", ResourceMode::Exclusive, 3});
   resource_defs_.emplace("HeadMotion", ResourceDef{"HeadMotion", ResourceMode::Shared, 2});
   resource_defs_.emplace("BodyMotion", ResourceDef{"BodyMotion", ResourceMode::Shared, 2});

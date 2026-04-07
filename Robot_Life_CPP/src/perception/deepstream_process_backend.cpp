@@ -188,9 +188,9 @@ DeepStreamAdapter& adapter_instance() {
 }
 }  // namespace
 
-DeepStreamLaunchSpec resolve_deepstream_launch_spec() {
+DeepStreamLaunchSpec resolve_deepstream_launch_spec(std::string requested_mode_override) {
   DeepStreamLaunchSpec spec{};
-  spec.requested_mode = resolve_requested_mode();
+  spec.requested_mode = requested_mode_override.empty() ? resolve_requested_mode() : std::move(requested_mode_override);
   spec.graph_config_path = resolve_graph_config_path();
   spec.deepstream_app_path = resolve_deepstream_app_path();
   spec.metadata_path = resolve_metadata_path();
@@ -237,7 +237,15 @@ DeepStreamLaunchSpec resolve_deepstream_launch_spec() {
   return spec;
 }
 
-DeepStreamProcessBackend::DeepStreamProcessBackend() = default;
+DeepStreamLaunchSpec resolve_deepstream_launch_spec() {
+  return resolve_deepstream_launch_spec({});
+}
+
+DeepStreamProcessBackend::DeepStreamProcessBackend(
+    std::string requested_mode_override,
+    bool require_real_runtime)
+    : requested_mode_override_(std::move(requested_mode_override)),
+      require_real_runtime_(require_real_runtime) {}
 
 DeepStreamProcessBackend::~DeepStreamProcessBackend() { stop(); }
 
@@ -247,7 +255,15 @@ bool DeepStreamProcessBackend::start() {
   stop();
   manual_stop_ = false;
   queue_.clear();
-  launch_spec_ = resolve_deepstream_launch_spec();
+  launch_spec_ = resolve_deepstream_launch_spec(requested_mode_override_);
+  if (require_real_runtime_ && launch_spec_.resolved_mode != "real") {
+    health_ = {.healthy = false,
+               .state = "failed",
+               .detail = "real DeepStream runtime required, got " + launch_spec_.resolved_mode +
+                         ": " + launch_spec_.detail};
+    stats_.running = false;
+    return false;
+  }
   return spawn_process();
 }
 

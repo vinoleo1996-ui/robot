@@ -92,7 +92,8 @@ int main(int argc, char** argv) {
   debug_bridge.publish(snap);
   std::cout << "[runtime] pending=" << snap.pending_events
             << " stable_last_tick=" << snap.stable_events_last_tick
-            << " scenes_last_tick=" << snap.scene_candidates_last_tick << "\n";
+            << " scenes_last_tick=" << snap.scene_candidates_last_tick
+            << " executions_last_tick=" << snap.executions_last_tick << "\n";
   if (snap.last_decision.has_value()) {
     std::cout << "[decision] behavior=" << snap.last_decision->target_behavior
               << " mode=" << robot_life_cpp::common::to_string(snap.last_decision->mode)
@@ -100,6 +101,14 @@ int main(int argc, char** argv) {
               << " reason=" << snap.last_decision->reason << "\n";
   } else {
     std::cout << "[decision] none\n";
+  }
+  if (snap.last_execution.has_value()) {
+    std::cout << "[execution] behavior=" << snap.last_execution->behavior_id
+              << " status=" << snap.last_execution->status
+              << " degraded=" << (snap.last_execution->degraded ? "true" : "false")
+              << "\n";
+  } else {
+    std::cout << "[execution] none\n";
   }
   std::cout << "[debug_bridge] " << debug_bridge.latest_json() << "\n";
   return 0;

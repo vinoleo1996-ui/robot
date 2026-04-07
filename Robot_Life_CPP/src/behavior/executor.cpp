@@ -40,7 +40,7 @@ common::ExecutionResult BehaviorExecutor::execute(
   std::optional<common::ArbitrationResult> resume_candidate{};
   if (decision.mode == common::DecisionMode::SoftInterrupt ||
       decision.mode == common::DecisionMode::HardInterrupt) {
-    if (active_execution_.has_value() && last_decision_.has_value() && last_decision_->resume_previous) {
+    if (last_decision_.has_value() && last_decision_->resume_previous) {
       resume_candidate = *last_decision_;
     }
     auto interrupted = interrupt_current(decision.mode, now_mono_s);

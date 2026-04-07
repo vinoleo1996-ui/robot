@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -19,6 +20,7 @@ struct EntityTrack {
   std::string last_detector{};
   std::string last_event_type{};
   std::string identity_hint{};
+  std::string external_track_key{};
 };
 
 struct EntityTrackerSnapshot {
@@ -41,10 +43,18 @@ class EntityTracker {
   static std::string infer_modality(
       const std::string& pipeline_name,
       const common::DetectionResult& detection);
+  static bool is_person_like_modality(const std::string& modality);
+  static bool is_object_like_modality(const std::string& modality);
+  static std::optional<std::string> make_external_track_key(
+      const std::string& modality,
+      const common::DetectionResult& detection,
+      const common::Payload& payload);
 
   EntityTrack* resolve_track(
       const std::string& modality,
       const std::string& identity_hint,
+      const std::optional<std::string>& external_track_key,
+      bool allow_recent_fallback,
       double now_mono_s);
 
   EntityTrack& create_track(
@@ -57,9 +67,9 @@ class EntityTracker {
   double person_ttl_s_{1.5};
   double object_ttl_s_{1.0};
   std::unordered_map<std::string, EntityTrack> tracks_{};
+  std::unordered_map<std::string, std::string> external_track_to_internal_{};
   int next_person_id_{1};
   int next_object_id_{1};
 };
 
 }  // namespace robot_life_cpp::event_engine
-

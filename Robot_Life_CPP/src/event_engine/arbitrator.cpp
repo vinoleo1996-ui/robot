@@ -40,6 +40,8 @@ std::optional<common::ArbitrationResult> Arbitrator::decide(
   common::ArbitrationResult result{};
   result.decision_id = common::new_id();
   result.trace_id = chosen->trace_id;
+  result.scene_type = chosen->scene_type;
+  result.target_id = chosen->target_id;
   result.priority = chosen_priority;
   result.target_behavior = behavior_for_scene(chosen->scene_type);
   result.mode = chosen_priority == common::EventPriority::P0 ? common::DecisionMode::HardInterrupt
@@ -54,6 +56,10 @@ std::optional<common::ArbitrationResult> Arbitrator::decide(
 }
 
 void Arbitrator::reset() { scene_last_decision_time_.clear(); }
+
+common::EventPriority Arbitrator::resolve_scene_priority(const std::string& scene_type) const {
+  return scene_priority(scene_type);
+}
 
 bool Arbitrator::is_scene_cooled_down(const std::string& scene_type, double now_mono_s) const {
   if (rules_.decision_cooldown_s <= 0.0) {

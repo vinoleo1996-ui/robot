@@ -115,8 +115,23 @@ std::string render_debug_dashboard_json(const DebugDashboardData& data) {
       << "\"preview_every_ticks\":" << data.load_shed.preview_every_ticks << ","
       << "\"telemetry_every_ticks\":" << data.load_shed.telemetry_every_ticks << "},";
   oss << "\"runtime\":{\"pending_events\":" << data.runtime.pending_events
+      << ",\"governed_events_last_tick\":" << data.runtime.governed_events_last_tick
+      << ",\"dropped_events_last_tick\":" << data.runtime.dropped_events_last_tick
       << ",\"stable_events_last_tick\":" << data.runtime.stable_events_last_tick
-      << ",\"scene_candidates_last_tick\":" << data.runtime.scene_candidates_last_tick << "},";
+      << ",\"scene_candidates_last_tick\":" << data.runtime.scene_candidates_last_tick
+      << ",\"active_target_id\":";
+  if (data.runtime.active_target_id.has_value()) {
+    oss << "\"" << json_escape(*data.runtime.active_target_id) << "\"";
+  } else {
+    oss << "null";
+  }
+  oss << ",\"active_scene_type\":";
+  if (data.runtime.active_scene_type.has_value()) {
+    oss << "\"" << json_escape(*data.runtime.active_scene_type) << "\"";
+  } else {
+    oss << "null";
+  }
+  oss << "},";
   oss << "\"backend\":{\"backend_id\":\"" << json_escape(data.backend.backend_id) << "\","
       << "\"running\":" << (data.backend.running ? "true" : "false") << ","
       << "\"delivered_batches\":" << data.backend.delivered_batches << ","
@@ -165,8 +180,12 @@ std::string render_debug_dashboard_html(const DebugDashboardData& data) {
       << "<div>batch cap: " << data.load_shed.max_events_per_batch << "</div>"
       << "<div>preview every " << data.load_shed.preview_every_ticks << " ticks</div></section>";
   oss << "<section class=\"card\"><h2>Runtime</h2><div>pending: <span class=\"metric\">" << data.runtime.pending_events
-      << "</span></div><div>stable: " << data.runtime.stable_events_last_tick
-      << "</div><div>scenes: " << data.runtime.scene_candidates_last_tick << "</div></section>";
+      << "</span></div><div>governed: " << data.runtime.governed_events_last_tick
+      << " | dropped: " << data.runtime.dropped_events_last_tick
+      << "</div><div>stable: " << data.runtime.stable_events_last_tick
+      << "</div><div>scenes: " << data.runtime.scene_candidates_last_tick
+      << "</div><div>active_target: " << html_escape(data.runtime.active_target_id.value_or("none"))
+      << "</div></section>";
   oss << "<section class=\"card\"><h2>Backend</h2><div class=\"metric\">" << html_escape(data.backend.backend_id)
       << "</div><div>batches: " << data.backend.delivered_batches << "</div><div>detections: "
       << data.backend.delivered_detections << "</div></section>";
@@ -203,6 +222,67 @@ std::string render_debug_dashboard_html(const DebugDashboardData& data) {
     oss << "</li>";
   }
   oss << "</ul></section>";
+  oss << "<section class=\"card\"><h2>Face Library</h2>"
+      << "<div style=\"display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;\">"
+      << "<input id=\"face-name\" placeholder=\"name\" style=\"flex:1;min-width:100px;background:#0d1117;border:1px solid #30363d;color:#e6edf3;border-radius:8px;padding:6px;\"/>"
+      << "<input id=\"face-file\" type=\"file\" accept=\"image/*\" style=\"flex:1;min-width:120px;color:#8b949e;\"/>"
+      << "<button id=\"face-add\" style=\"background:#238636;color:#fff;border:none;border-radius:8px;padding:6px 10px;cursor:pointer;\">Upload</button>"
+      << "</div>"
+      << "<div style=\"font-size:12px;color:#8b949e;margin-bottom:6px;\">Active target: <code id=\"active-target\">"
+      << html_escape(data.runtime.active_target_id.value_or("none"))
+      << "</code></div>"
+      << "<ul id=\"face-list\" style=\"max-height:180px;overflow:auto;\"></ul>"
+      << "<div id=\"face-status\" style=\"font-size:12px;color:#7ee787;\"></div>"
+      << "</section>";
+  oss << "<script>"
+      << "(function(){"
+      << "let activeTarget='" << json_escape(data.runtime.active_target_id.value_or("")) << "';"
+      << "const listEl=document.getElementById('face-list');"
+      << "const statusEl=document.getElementById('face-status');"
+      << "const nameEl=document.getElementById('face-name');"
+      << "const fileEl=document.getElementById('face-file');"
+      << "const addEl=document.getElementById('face-add');"
+      << "const activeEl=document.getElementById('active-target');"
+      << "function postForm(url,data){return fetch(url,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json());}"
+      << "function del(url){return fetch(url,{method:'DELETE'}).then(r=>r.json());}"
+      << "async function pullState(){"
+      << "try{const rec=await fetch('/api/recognition').then(r=>r.json());"
+      << "activeTarget=rec.active_target_id||'';"
+      << "activeEl.textContent=activeTarget||'none';"
+      << "if(rec.recognized&&rec.person_name){statusEl.textContent='recognized: '+rec.person_name+' @ '+activeTarget;}"
+      << "}catch(e){statusEl.textContent='state sync failed';}"
+      << "}"
+      << "async function render(){"
+      << "const [facesRes,bindRes]=await Promise.all([fetch('/api/faces').then(r=>r.json()),fetch('/api/bindings').then(r=>r.json())]);"
+      << "const faces=facesRes.faces||[];"
+      << "const binds=bindRes.bindings||{};"
+      << "listEl.innerHTML='';"
+      << "if(!faces.length){listEl.innerHTML='<li style=\"color:#8b949e;\">no registered faces</li>';return;}"
+      << "faces.forEach(f=>{"
+      << "const li=document.createElement('li');"
+      << "li.style.marginBottom='6px';"
+      << "li.style.display='flex';li.style.alignItems='center';li.style.gap='6px';"
+      << "const preview=f.image_data?'<img src=\"'+f.image_data+'\" style=\"width:28px;height:28px;border-radius:999px;object-fit:cover;border:1px solid #30363d;\"/>':'<span style=\"width:28px;height:28px;display:inline-block;background:#30363d;border-radius:999px;\"></span>';"
+      << "const bound=(activeTarget&&binds[activeTarget]===f.face_id)?' <span style=\"color:#3fb950;\">(bound)</span>':'';"
+      << "li.innerHTML=preview+'<span style=\"flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;\">'+f.name+bound+'</span>';"
+      << "const bindBtn=document.createElement('button');bindBtn.textContent='Bind';bindBtn.style.cssText='background:#1f6feb;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;';"
+      << "bindBtn.onclick=async()=>{if(!activeTarget){statusEl.textContent='no active target to bind';return;}const rs=await postForm('/api/bindings',{target_id:activeTarget,face_id:f.face_id});statusEl.textContent=rs.ok?('bound '+f.name+' -> '+activeTarget):(rs.error||'bind failed');render();};"
+      << "const delBtn=document.createElement('button');delBtn.textContent='Delete';delBtn.style.cssText='background:#da3633;color:#fff;border:none;border-radius:6px;padding:4px 8px;cursor:pointer;';"
+      << "delBtn.onclick=async()=>{const rs=await del('/api/faces/'+encodeURIComponent(f.face_id));statusEl.textContent=rs.ok?('deleted '+f.name):(rs.error||'delete failed');render();};"
+      << "li.appendChild(bindBtn);li.appendChild(delBtn);listEl.appendChild(li);"
+      << "});"
+      << "}"
+      << "addEl.onclick=()=>{const name=(nameEl.value||'').trim();const file=(fileEl.files&&fileEl.files[0])?fileEl.files[0]:null;"
+      << "if(!name||!file){statusEl.textContent='name and image are required';return;}"
+      << "const reader=new FileReader();"
+      << "reader.onload=async()=>{const rs=await postForm('/api/faces',{name:name,image_data:String(reader.result||'')});"
+      << "nameEl.value='';fileEl.value='';statusEl.textContent=rs.ok?('uploaded '+name):(rs.error||'upload failed');render();};"
+      << "reader.readAsDataURL(file);};"
+      << "setInterval(pullState,1000);"
+      << "pullState();"
+      << "render();"
+      << "})();"
+      << "</script>";
   oss << "</div></body></html>";
   return oss.str();
 }
